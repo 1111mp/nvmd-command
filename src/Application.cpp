@@ -4,14 +4,17 @@
 
 int main(int argc, char *argv[])
 {
-  const std::string lib = argv[0];
-  std::string params;
-  for (int i = 1; i < argc; i++)
-  {
-    params = params + " " + argv[i];
-  }
+  std::string lib = argv[0];
 
   const std::string nvmd = getenv("NVMD_DIR");
+
+  // example: Users/zhangyifan/.nvmd/bin/node --version
+  if (lib.find(nvmd + "/bin") != std::string::npos)
+  {
+    std::vector<std::string> splits = Nvmd::stringSplit(lib, '/');
+    lib = splits.back();
+  }
+
   const auto version = Nvmd::getVersion(nvmd);
   if (version.empty())
   {
@@ -27,25 +30,34 @@ int main(int argc, char *argv[])
   path = nvmd + "/versions/" + version + "/bin/";
 #endif
 
+  std::string params;
+  for (int i = 1; i < argc; i++)
+  {
+    params = params + " " + argv[i];
+  }
+
   // generate command
-  std::string command = path + lib + " " + params;
+  std::string command = path + lib + params;
+
   if (lib != "node")
   {
     command = path + "node " + command;
   }
 
+  std::cout << command << std::endl;
+
   if (lib != "npm")
   {
-    std::system(command.data());
-    return 0;
+    auto code = std::system(command.data());
+    return code;
   }
 
   const auto isGlobal = (params.find("-g") != std::string::npos) || (params.find("--global") != std::string::npos);
 
   if (!isGlobal)
   {
-    std::system(command.data());
-    return 0;
+    auto code = std::system(command.data());
+    return code;
   }
 
   // npm install -g or npm uninstall -g
