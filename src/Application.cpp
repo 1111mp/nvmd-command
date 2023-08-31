@@ -1,4 +1,6 @@
 #include <iostream>
+#include <stdlib.h>
+#include <unistd.h>
 
 #include "nvmd.h"
 
@@ -27,7 +29,7 @@ int main(int argc, char *argv[])
 #if defined(NVMD_PLATFORM_WINDOWS)
   path = nvmd + "/versions/" + version + "/";
 #else
-  path = nvmd + "/versions/" + version + "/bin/";
+  path = nvmd + "/versions/" + version + "/bin";
 #endif
 
   std::string params;
@@ -36,82 +38,89 @@ int main(int argc, char *argv[])
     params = params + " " + argv[i];
   }
 
-  // generate command
-  std::string command = path + lib + params;
-
-  if (lib != "node")
-  {
-    command = path + "node " + command;
-  }
-
-  std::cout << command << std::endl;
-
-  if (lib != "npm")
-  {
-    auto code = std::system(command.data());
-    return code;
-  }
-
+  const auto installOrUninstall = (params.find("install") != std::string::npos) || (params.find("uninstall") != std::string::npos);
   const auto isGlobal = (params.find("-g") != std::string::npos) || (params.find("--global") != std::string::npos);
 
-  if (!isGlobal)
-  {
-    auto code = std::system(command.data());
-    return code;
-  }
-
   // npm install -g or npm uninstall -g
-  auto packages = Nvmd::getPackages(argc, argv);
-  const auto commandName = packages[0];
-  packages.erase(packages.begin());
-
-  if (commandName == "install")
+  if (lib == "npm" && installOrUninstall && isGlobal)
   {
-    // npm install -g
-    const auto code = std::system(command.data());
-    if (code == 0)
-    {
+    path = path + "/";
+    std::string command = path + lib + params;
+    command = path + "node " + command;
+    auto packages = Nvmd::getPackages(argc, argv);
+    const auto commandName = packages[0];
+    packages.erase(packages.begin());
 
+    if (commandName == "install")
+    {
+      // npm install -g
+      const auto code = std::system(command.data());
+      if (code == 0)
+      {
+
+        // the dir of npm global installed
+        const auto perfix = Nvmd::getNpmRootPerfix(path, nvmd + "/temp.txt");
+        // get packages bin name
+        const auto packagesName = Nvmd::getPackagesName(perfix, packages);
+
+        Nvmd::recordForInstallPackages(version, nvmd + "/packages.json", packagesName);
+
+        const std::string binDir = nvmd + "/bin";
+        for (const auto &name : packagesName)
+        {
+          const auto alias = binDir + "/" + name;
+          if (!std::filesystem::is_symlink(alias))
+          {
+            std::filesystem::create_symlink(binDir + "/nvmd", alias);
+          }
+        }
+      }
+    }
+
+    if (commandName == "uninstall")
+    {
+      // npm uninstall -g
       // the dir of npm global installed
       const auto perfix = Nvmd::getNpmRootPerfix(path, nvmd + "/temp.txt");
       // get packages bin name
       const auto packagesName = Nvmd::getPackagesName(perfix, packages);
 
-      Nvmd::recordForInstallPackages(version, nvmd + "/packages.json", packagesName);
-
-      const std::string binDir = nvmd + "/bin";
-      for (const auto &name : packagesName)
+      const auto code = std::system(command.data());
+      if (code == 0)
       {
-        const auto alias = binDir + "/" + name;
-        if (!std::filesystem::is_symlink(alias))
+        const std::string binDir = nvmd + "/bin";
+        for (const auto &name : packagesName)
         {
-          std::filesystem::create_symlink(binDir + "/nvmd", alias);
+          const auto alias = binDir + "/" + name;
+          if (Nvmd::recordForUninstallPackage(version, nvmd + "/packages.json", name))
+          {
+            std::filesystem::remove(alias);
+          }
         }
       }
     }
+
+    return 0;
   }
 
-  if (commandName == "uninstall")
-  {
-    // npm uninstall -g
-    // the dir of npm global installed
-    const auto perfix = Nvmd::getNpmRootPerfix(path, nvmd + "/temp.txt");
-    // get packages bin name
-    const auto packagesName = Nvmd::getPackagesName(perfix, packages);
+  std::string target = path + "/" + lib;
 
-    const auto code = std::system(command.data());
-    if (code == 0)
-    {
-      const std::string binDir = nvmd + "/bin";
-      for (const auto &name : packagesName)
-      {
-        const auto alias = binDir + "/" + name;
-        if (Nvmd::recordForUninstallPackage(version, nvmd + "/packages.json", name))
-        {
-          std::filesystem::remove(alias);
-        }
-      }
-    }
+  char *args[argc + 1];
+  for (int i = 0; i < argc; i++)
+  {
+    args[i] = argv[i];
+  }
+
+  args[argc] = nullptr;
+
+  std::string envPath = getenv("PATH");
+  auto newEnvPath = "PATH=" + path + ":" + envPath;
+
+  char *envp[] = {newEnvPath.data(), nullptr};
+
+  if (execve(target.c_str(), args, envp))
+  {
+    std::cout << lib << ": command not found" << std::endl;
   }
 
   return 0;

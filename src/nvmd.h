@@ -3,12 +3,24 @@
 #include <filesystem>
 #include <fstream>
 #include <vector>
+#include <thread>
+#include <regex>
 #include <json/json.h>
 
 #include "cmdline.h"
 
 namespace Nvmd
 {
+  void noblock_system(const std::string &cmd)
+  {
+    std::thread thread{[cmd]()
+                       {
+                         std::system(cmd.c_str());
+                       }};
+
+    thread.detach();
+  }
+
   std::vector<std::string> stringSplit(const std::string &str, char delim)
   {
     std::stringstream ss(str);
@@ -85,8 +97,20 @@ namespace Nvmd
     command.add("global", 'g', "global");
     command.parse_check(argc, argv);
 
-    auto packages = command.rest();
+    std::vector<std::string> packages = command.rest();
     // packages.erase(packages.begin());
+
+    std::regex reg("@[0-9]|@latest");
+    for (int i = 1; i < packages.size(); i++)
+    {
+      std::string pk = packages[i];
+      std::smatch smatch;
+      if (std::regex_search(pk, smatch, reg))
+      {
+        const auto index = smatch.position();
+        packages[i] = pk.substr(0, index);
+      }
+    }
 
     return packages;
   }
