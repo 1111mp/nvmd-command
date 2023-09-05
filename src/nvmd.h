@@ -11,6 +11,13 @@
 
 namespace Nvmd
 {
+
+#if defined(NVMD_PLATFORM_WINDOWS)
+  static const std::string block = "\\";
+#else
+  static const std::string block = "/";
+#endif
+
   void noblock_system(const std::string &cmd)
   {
     std::thread thread{[cmd]()
@@ -78,7 +85,7 @@ namespace Nvmd
 
   std::string getNpmRootPerfix(const std::string &path, const std::string &tempFile)
   {
-    const auto command = path + "node " + path + "npm " + "root -g >" + tempFile;
+    const auto command = path + "npm " + "root -g >" + tempFile;
     std::system(command.data());
     auto content = readFileContent(tempFile);
     std::string::size_type pos = 0;
@@ -120,7 +127,7 @@ namespace Nvmd
     std::vector<std::string> names;
     for (const auto &package : packages)
     {
-      const auto packageJson = perfix + "/" + package + "/package.json";
+      const auto packageJson = perfix + block + package + block + "package.json";
       if (std::filesystem::is_regular_file(packageJson))
       {
         std::ifstream file(packageJson, std::ifstream::binary);
