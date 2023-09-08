@@ -1,8 +1,9 @@
+#[cfg(unix)]
+use std::os::unix::fs;
 use std::{
     env::{self, ArgsOs},
     ffi::{OsStr, OsString},
     io::{BufRead, BufReader, Error, ErrorKind},
-    os::unix::fs,
     path::{Path, PathBuf},
     process::Stdio,
     sync::Mutex,
@@ -143,51 +144,48 @@ pub fn install_packages(args: &Vec<OsString>) {
         .collect();
 
     let npm_perfix = get_npm_perfix();
-    println!("{}", npm_perfix);
-
-    for package in packages {
-        println!("{:?}", package);
-    }
 
     let package_bin_names = get_package_bin_names(&npm_perfix, packages);
 
     record_installed_package(&package_bin_names);
 
     for name in &package_bin_names {
-        println!("{}", name);
-
-        if cfg!(unix) {
-            let mut source = NVMD_PATH.clone();
-            source.push("bin");
-            source.push("nvmd");
-            let mut alias = NVMD_PATH.clone();
-            alias.push("bin");
-            alias.push(name);
-
-            fs::symlink(source, alias).unwrap_or_else(|why| {
-                println!("! {:?}", why.kind());
-            })
-        }
+        link_package(name);
     }
 }
 
 pub fn uninstall_packages() {
     let names = UNINSTALL_PACKAGES_NAME.lock().unwrap();
     for name in names.iter() {
-        println!("{}", name);
         if record_uninstall_package(name) {
             // need to remove executable file
-            let mut alias = NVMD_PATH.clone();
-            alias.push("bin");
-            alias.push(name);
-
-            if cfg!(unix) {
-                remove(alias).unwrap_or_else(|why| {
-                    println!("! {:?}", why.kind);
-                });
-            }
+            unlink_package(name);
         }
     }
+}
+
+#[cfg(unix)]
+fn unlink_package(name: &String) {
+    let mut alias = NVMD_PATH.clone();
+    alias.push("bin");
+    alias.push(name);
+
+    remove(alias).unwrap_or_else(|_why| {});
+}
+
+#[cfg(windows)]
+fn unlink_package(name: &String) {
+    let mut exe_alias = NVMD_PATH.clone();
+    exe_alias.push("bin");
+    let exe = name.clone() + ".exe";
+    exe_alias.push(exe);
+    let mut cmd_alias = NVMD_PATH.clone();
+    cmd_alias.push("bin");
+    let cmd = name.clone() + ".cmd";
+    cmd_alias.push(cmd);
+
+    remove(exe_alias).unwrap_or_else(|_why| {});
+    remove(cmd_alias).unwrap_or_else(|_why| {});
 }
 
 pub fn collection_packages_name(args: &Vec<OsString>) {
@@ -213,11 +211,6 @@ pub fn collection_packages_name(args: &Vec<OsString>) {
         .collect();
 
     let npm_perfix = get_npm_perfix();
-    println!("{}", npm_perfix);
-
-    for package in packages {
-        println!("{:?}", package);
-    }
 
     let package_bin_names = get_package_bin_names(&npm_perfix, packages);
 
@@ -230,7 +223,6 @@ pub fn collection_packages_name(args: &Vec<OsString>) {
 }
 
 fn record_installed_package(packages: &Vec<String>) {
-    println!("record_installed_package");
     let mut packages_path = NVMD_PATH.clone();
     packages_path.push("packages.json");
 
@@ -242,7 +234,6 @@ fn record_installed_package(packages: &Vec<String>) {
                 json_obj[package] = json!([*VERSION]);
             }
             let json_str = json_obj.to_string();
-            println!("{}", json_str);
             write_all(packages_path, &json_str).unwrap();
         }
         Ok(content) => {
@@ -268,7 +259,6 @@ fn record_installed_package(packages: &Vec<String>) {
                     }
                 }
                 let json_str = json_obj.to_string();
-                println!("{}", json_str);
                 write_all(packages_path, &json_str).unwrap();
             }
         }
@@ -286,8 +276,6 @@ fn record_uninstall_package(name: &String) -> bool {
                 return true;
             }
 
-            println!("111");
-
             let mut json_obj: Value = from_str(&content).unwrap();
 
             if json_obj.is_null() || !json_obj.is_object() {
@@ -300,53 +288,29 @@ fn record_uninstall_package(name: &String) -> bool {
 
             let versions = json_obj[name].as_array_mut().unwrap();
 
-            for v in versions.clone() {
-                println!("v: {}", v.as_str().unwrap());
-            }
-
-            println!("{}", versions.is_empty());
-
             if versions.is_empty() {
                 return true;
             }
 
-            println!("{}", *VERSION);
-            println!("{}", *VERSION);
-
             let target = json!(*VERSION);
 
-            println!("{}", versions.contains(&target));
             if !versions.contains(&target) {
                 return false;
             }
 
-            println!("333");
-
             versions.retain(|x| x.as_str().unwrap() != target.as_str().unwrap());
-
-            for v in versions.clone() {
-                println!("v: {}", v.as_str().unwrap());
-            }
-
-            println!("444");
 
             let mut ret: bool = false;
             if versions.is_empty() {
                 ret = true;
             }
-            println!("555");
 
             let json_str = json_obj.to_string();
-            println!("{}", json_str);
             write_all(packages_path, &json_str).unwrap();
-
-            println!("666");
 
             return ret;
         }
     };
-
-    println!("{}", record);
 
     return record;
 }
@@ -408,6 +372,44 @@ fn get_npm_perfix() -> String {
     }
 
     return perfix;
+}
+
+#[cfg(unix)]
+fn link_package(name: &String) {
+    let mut source = NVMD_PATH.clone();
+    source.push("bin");
+    source.push("nvmd");
+    let mut alias = NVMD_PATH.clone();
+    alias.push("bin");
+    alias.push(name);
+
+    fs::symlink(source, alias).unwrap_or_else(|_why| {})
+}
+
+#[cfg(windows)]
+fn link_package(name: &String) {
+    use fs_extra::file::{copy, CopyOptions};
+    // from
+    let mut exe_source = NVMD_PATH.clone();
+    exe_source.push("bin");
+    exe_source.push("nvmd.exe");
+    let mut cmd_source = NVMD_PATH.clone();
+    cmd_source.push("bin");
+    cmd_source.push("npm.cmd");
+
+    // to
+    let mut exe_alias = NVMD_PATH.clone();
+    exe_alias.push("bin");
+    let exe = name.clone() + ".exe";
+    exe_alias.push(exe);
+    let mut cmd_alias = NVMD_PATH.clone();
+    cmd_alias.push("bin");
+    let cmd = name.clone() + ".cmd";
+    cmd_alias.push(cmd);
+
+    let options = CopyOptions::new(); //Initialize default values for CopyOptions
+    copy(&exe_source, &exe_alias, &options).unwrap();
+    copy(&cmd_source, &cmd_alias, &options).unwrap();
 }
 
 fn default_home_dir() -> Result<PathBuf, ErrorKind> {

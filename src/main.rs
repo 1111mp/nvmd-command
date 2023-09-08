@@ -29,12 +29,13 @@ fn main() {
         lib_path.push("versions");
         lib_path.push(VERSION.clone());
         if cfg!(unix) {
+            // unix
             lib_path.push("bin");
-            lib_path.push(&lib);
         }
+        lib_path.push(&lib);
 
         if !lib_path.exists() {
-            println!("{} command not found", &lib);
+            println!("[nvm-desktop] command not found: {}", &lib);
             process::exit(1);
         }
     }
@@ -45,7 +46,6 @@ fn main() {
         && args.contains(&UNINSTALL)
         && (args.contains(&GLOBAL) || args.contains(&SHORT_GLOBAL))
     {
-        println!("npm uninstall -g");
         nvmd::collection_packages_name(&args);
     }
 
@@ -66,18 +66,14 @@ fn main() {
 
     if code == 0 {
         // successed
-        println!("---------end--------");
         if (args.contains(&INSTALL) || args.contains(&UNINSTALL))
             && (args.contains(&SHORT_GLOBAL) || args.contains(&GLOBAL))
         {
-            println!("-------global--------");
             if args.contains(&INSTALL) {
-                println!("npm install -g");
                 nvmd::install_packages(&args);
             }
 
             if args.contains(&UNINSTALL) {
-                println!("npm uninstall -g then unlink");
                 nvmd::uninstall_packages();
             }
         }
