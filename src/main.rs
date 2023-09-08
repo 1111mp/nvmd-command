@@ -1,22 +1,59 @@
-use std::{env, process};
+use std::{env, ffi::OsString, process};
+
+use crate::nvmd::{ENV_PATH, NVMD_PATH, VERSION};
+use lazy_static::lazy_static;
 
 mod command;
 mod nvmd;
+
+lazy_static! {
+    static ref INSTALL: OsString = OsString::from("install");
+    static ref UNINSTALL: OsString = OsString::from("uninstall");
+    static ref GLOBAL: OsString = OsString::from("--global");
+    static ref SHORT_GLOBAL: OsString = OsString::from("-g");
+}
 
 fn main() {
     let mut native_args = env::args_os();
     let exe = nvmd::get_tool_name(&mut native_args).expect("get tool name error");
     let args: Vec<_> = native_args.collect();
 
-    let env_path = nvmd::get_env_path();
-    // println!("{:?}", env_path);
+    let lib = match exe.clone().into_string() {
+        Ok(s) => s,
+        Err(_) => String::from(""),
+    };
 
-    let mut command = command::create_command(exe);
+    if !lib.is_empty() && lib != "node" && lib != "npm" && lib != "npx" && lib != "corepack" {
+        // check the third package
+        let mut lib_path = NVMD_PATH.clone();
+        lib_path.push("versions");
+        lib_path.push(VERSION.clone());
+        if cfg!(unix) {
+            lib_path.push("bin");
+            lib_path.push(&lib);
+        }
 
-    // .env("PATH", "/Users/zhangyifan/.nvmd/versions/18.17.1/bin:/Users/zhangyifan/.nvmd/bin::/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Library/Apple/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/Users/zhangyifan/.cargo/bin")
+        if !lib_path.exists() {
+            println!("{} command not found", &lib);
+            process::exit(1);
+        }
+    }
+
+    // for npm uninstall -g packages
+    // collection the bin names of packages
+    if lib == "npm"
+        && args.contains(&UNINSTALL)
+        && (args.contains(&GLOBAL) || args.contains(&SHORT_GLOBAL))
+    {
+        println!("npm uninstall -g");
+        nvmd::collection_packages_name(&args);
+    }
+
+    let mut command = command::create_command(&exe);
+
     let child = command
-        .env("PATH", env_path)
-        .args(args)
+        .env("PATH", ENV_PATH.clone())
+        .args(&args)
         .spawn()
         .expect("command failed to start");
 
@@ -26,6 +63,25 @@ fn main() {
         true => 0,
         false => 1,
     };
+
+    if code == 0 {
+        // successed
+        println!("---------end--------");
+        if (args.contains(&INSTALL) || args.contains(&UNINSTALL))
+            && (args.contains(&SHORT_GLOBAL) || args.contains(&GLOBAL))
+        {
+            println!("-------global--------");
+            if args.contains(&INSTALL) {
+                println!("npm install -g");
+                nvmd::install_packages(&args);
+            }
+
+            if args.contains(&UNINSTALL) {
+                println!("npm uninstall -g then unlink");
+                nvmd::uninstall_packages();
+            }
+        }
+    }
 
     process::exit(code);
 }
