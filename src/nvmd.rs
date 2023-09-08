@@ -350,25 +350,21 @@ fn get_package_bin_names(npm_perfix: &String, packages: &Vec<OsString>) -> Vec<S
 fn get_npm_perfix() -> String {
     let mut command = command::create_command("npm");
 
-    let mut env_path = NVMD_PATH.clone();
-    env_path.push("versions");
-    env_path.push(VERSION.clone());
-    if cfg!(unix) {
-        env_path.push("bin");
-    }
-
     let child = command
-        .env("PATH", env_path.into_os_string())
+        .env("PATH", ENV_PATH.clone())
         .args(["root", "-g"])
         .stdout(Stdio::piped())
         .spawn()
         .expect("get npm perfix error");
 
     let output = child.stdout.unwrap();
-    let lines = BufReader::new(output).lines().enumerate().take(1);
+    let lines = BufReader::new(output).lines();
     let mut perfix = String::from("");
-    for (_counter, line) in lines {
-        perfix = line.unwrap();
+    for line in lines {
+        let cur_line = line.unwrap();
+        if cur_line.contains(".nvmd") {
+            perfix = cur_line;
+        }
     }
 
     return perfix;
