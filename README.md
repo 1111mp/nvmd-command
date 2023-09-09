@@ -44,5 +44,6 @@ This ensures the independence of each version of the Node engine, and they will 
 - First, you should have a Rust runtime installed locally. Please read the official guide: [rust get-started](https://www.rust-lang.org/learn/get-started).
 - Then pull the project code locally, go to the `./` folder.
 - Run `cargo build` (debug) or `cargo build --release` (release) build your executable.
+- Finally, you can find the compiled executable named `nvmd` in the `./target/release/` directory. (`nvmd.exe` on Windows.)
 
 Check out this [documentation](https://github.com/1111mp/nvm-desktop#develop-and-build) on how to package this executable with [nvm-desktop](https://github.com/1111mp/nvm-desktop).
