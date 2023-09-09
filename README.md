@@ -1,6 +1,6 @@
 # nvmd-command
 
-It’s a single, fast native executable, with no external dependencies, build with Rust. A proxy for Node and Npm, through which it can intelligently (quickly) identify the correct version of the Node engine.
+`nvmd-comand` is a single, fast native executable, with no external dependencies, build with Rust. A proxy for Node and Npm, through which it can intelligently (quickly) identify the correct version of the Node engine.
 
 Provides services for [nvm-desktop](https://github.com/1111mp/nvm-desktop)'s Node engine version management function.
 
@@ -38,3 +38,11 @@ When uninstalling global packages, this information will be used to determine wh
 ```
 
 This ensures the independence of each version of the Node engine, and they will not affect each other.
+
+### Build nvmd-command
+
+- First, you should have a Rust runtime installed locally. Please read the official guide: [rust get-started](https://www.rust-lang.org/learn/get-started).
+- Then pull the project code locally, go to the `./` folder.
+- Run `cargo build` (debug) or `cargo build --release` (release) build your executable.
+
+Check out this [documentation](https://github.com/1111mp/nvm-desktop#develop-and-build) on how to package this executable with [nvm-desktop](https://github.com/1111mp/nvm-desktop).
