@@ -1,7 +1,8 @@
 [package]
 name = "nvmd"
-version = "0.1.0"
+version = "2.2.0"
 edition = "2021"
+authors = ["The1111mp@outlook.com"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

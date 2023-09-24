@@ -15,7 +15,7 @@ use version_compare::{compare, Cmp};
 use crate::common::{NVMD_PATH, VERSION};
 
 #[derive(Parser)]
-#[command(name="nvmd", author="The1111mp@outlook.com", version="2.2.0", about="command tools for nvm-desktop", after_help="Please download new version of Node.js in nvm-desktop.", long_about = None)]
+#[command(name=env!("CARGO_PKG_NAME"), author=env!("CARGO_PKG_AUTHORS"), version=env!("CARGO_PKG_VERSION"), about="command tools for nvm-desktop", after_help="Please download new version of Node.js in nvm-desktop.", long_about = None)]
 #[command(help_template = "\
 {before-help}{name} ({version})
 {author-with-newline}{about-with-newline}
