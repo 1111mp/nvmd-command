@@ -1,10 +1,12 @@
 use super::ExitStatus;
+use chrono::Local;
 use clap::{Parser, Subcommand};
 use fs_extra::{
     dir::{ls, DirEntryAttr, DirEntryValue},
     error::Error,
-    file::write_all,
+    file::{read_to_string, write_all},
 };
+use serde_json::{from_str, json, Value};
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
 #[cfg(windows)]
@@ -154,6 +156,57 @@ fn command_for_use_project(ver: &String) {
     }
 
     let mut nvmdrc_path = env::current_dir().unwrap();
+    let project_name = nvmdrc_path
+        .file_name()
+        .map(|name| name.to_str().unwrap())
+        .unwrap();
+
+    // update projects.json
+    let mut projects_path = NVMD_PATH.clone();
+    projects_path.push("projects.json");
+
+    let update_projects = || {
+        let mut pro_obj = json!({});
+        let now = Local::now().to_string();
+        pro_obj["name"] = json!(project_name);
+        pro_obj["path"] = json!(nvmdrc_path);
+        pro_obj["version"] = json!(version);
+        pro_obj["active"] = json!(true);
+        pro_obj["createAt"] = json!(now);
+        pro_obj["updateAt"] = json!(now);
+
+        let mut json_obj = json!([]);
+        json_obj.as_array_mut().unwrap().push(pro_obj);
+
+        let json_str = json_obj.to_string();
+        write_all(&projects_path, &json_str).unwrap();
+    };
+
+    match read_to_string(&projects_path) {
+        Ok(content) => {
+            if content.is_empty() {
+                update_projects();
+            } else {
+                let mut json_obj: Value = from_str(&content).unwrap();
+                let projects = json_obj.as_array_mut().unwrap();
+                for project in projects {
+                    let name = project["name"].as_str().unwrap();
+                    if name == project_name {
+                        project["version"] = json!(version);
+                        project["updateAt"] = json!(Local::now().to_string());
+                    }
+                }
+
+                let json_str = json_obj.to_string();
+                write_all(&projects_path, &json_str).unwrap();
+            }
+        }
+        Err(_) => {
+            update_projects();
+        }
+    };
+
+    // update .nvmdrc
     nvmdrc_path.push(".nvmdrc");
 
     match write_all(nvmdrc_path, &version) {
