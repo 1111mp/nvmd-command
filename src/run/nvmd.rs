@@ -97,7 +97,9 @@ fn command_for_list() -> Result<(), Error> {
     for item in ls_result.items {
         match item.get(&DirEntryAttr::Name) {
             Some(DirEntryValue::String(version)) => {
-                versions.push(version.clone());
+                if is_uninstall_version(version) {
+                    versions.push(version.clone());
+                }
             }
             _ => {}
         }
@@ -243,8 +245,12 @@ fn is_uninstall_version(version: &String) -> bool {
     let mut version_path = NVMD_PATH.clone();
     version_path.push("versions");
     version_path.push(&version);
+    if cfg!(windows) {
+        version_path.push("node.exe");
+    }
     if cfg!(unix) {
         version_path.push("bin");
+        version_path.push("node");
     }
 
     version_path.exists()
