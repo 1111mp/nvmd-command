@@ -97,8 +97,8 @@ fn command_for_list() -> Result<(), Error> {
     for item in ls_result.items {
         match item.get(&DirEntryAttr::Name) {
             Some(DirEntryValue::String(version)) => {
-                if is_uninstall_version(version) {
-                    versions.push(version.clone());
+                if is_valid_version(version) {
+                    versions.push(version.to_string());
                 }
             }
             _ => {}
@@ -128,7 +128,7 @@ fn command_for_use_global(ver: &String) {
         version.remove(0);
     }
 
-    if !is_uninstall_version(&version) {
+    if !is_valid_version(&version) {
         eprintln!("nvm-desktop: v{} has not been installed", &version);
         return;
     }
@@ -152,7 +152,7 @@ fn command_for_use_project(ver: &String) {
         version.remove(0);
     }
 
-    if !is_uninstall_version(&version) {
+    if !is_valid_version(&version) {
         eprintln!("nvm-desktop: v{} has not been installed", &version);
         return;
     }
@@ -241,7 +241,7 @@ fn command_for_which(ver: &String) {
     }
 }
 
-fn is_uninstall_version(version: &String) -> bool {
+fn is_valid_version(version: &String) -> bool {
     let mut version_path = NVMD_PATH.clone();
     version_path.push("versions");
     version_path.push(&version);

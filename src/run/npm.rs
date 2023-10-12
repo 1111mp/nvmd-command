@@ -248,7 +248,7 @@ fn get_npm_perfix() -> String {
     let mut perfix = String::from("");
     for line in lines {
         let cur_line = line.unwrap();
-        if cur_line.contains(".nvmd") {
+        if PathBuf::from(&cur_line).is_dir() {
             perfix = cur_line;
         }
     }
