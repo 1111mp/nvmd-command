@@ -19,6 +19,7 @@ use crate::{
 
 lazy_static! {
     static ref INSTALL: OsString = OsString::from("install");
+    static ref SHORT_INSTALL: OsString = OsString::from("i");
     static ref UNINSTALL: OsString = OsString::from("uninstall");
     static ref GLOBAL: OsString = OsString::from("--global");
     static ref SHORT_GLOBAL: OsString = OsString::from("-g");
@@ -30,7 +31,6 @@ lazy_static! {
 
 pub(super) fn command(exe: &OsStr, args: &[OsString]) -> Result<ExitStatus, String> {
     let is_global = args.contains(&SHORT_GLOBAL) || args.contains(&GLOBAL);
-    let is_global_install = is_global && args.contains(&INSTALL);
     let is_global_uninstall = is_global && args.contains(&UNINSTALL);
 
     // for npm uninstall -g packages
@@ -49,6 +49,8 @@ pub(super) fn command(exe: &OsStr, args: &[OsString]) -> Result<ExitStatus, Stri
     match child {
         Ok(status) => {
             if status.success() {
+                let is_global_install =
+                    is_global && (args.contains(&INSTALL) || args.contains(&SHORT_INSTALL));
                 // npm install -g packages
                 if is_global_install {
                     global_install_packages(args);
