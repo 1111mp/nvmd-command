@@ -69,7 +69,8 @@ pub(super) fn command(exe: &OsStr, args: &[OsString]) -> Result<ExitStatus, Stri
 }
 
 fn global_install_packages(args: &[OsString]) {
-    let re: Regex = Regex::new(r"@[0-9]|@latest").unwrap();
+    let re_str = "@[0-9]|@latest|@\"|@npm:";
+    let re: Regex = Regex::new(re_str).unwrap();
     let packages = &args
         .into_iter()
         .filter(is_positional)
@@ -81,11 +82,11 @@ fn global_install_packages(args: &[OsString]) {
                 Some(mat) => {
                     let str = &package[0..(mat.start())];
 
-                    return OsString::from(str);
+                    OsString::from(str)
                 }
             };
 
-            return OsString::from(new_package);
+            OsString::from(new_package)
         })
         .collect();
 
@@ -93,10 +94,12 @@ fn global_install_packages(args: &[OsString]) {
 
     let package_bin_names = get_package_bin_names(&npm_perfix, packages);
 
-    record_installed_package(&package_bin_names);
+    if !package_bin_names.is_empty() {
+        record_installed_package(&package_bin_names);
 
-    for name in &package_bin_names {
-        link_package(name);
+        for name in &package_bin_names {
+            link_package(name);
+        }
     }
 }
 
@@ -210,18 +213,17 @@ fn collection_packages_name(args: &[OsString]) {
         .filter(is_positional)
         .map(|x| {
             let package = String::from(x.to_str().unwrap());
-            // let mat = re.find(&package).unwrap();
 
             let new_package = match re.find(&package) {
                 None => OsString::from(&package),
                 Some(mat) => {
                     let str = &package[0..(mat.start())];
 
-                    return OsString::from(str);
+                    OsString::from(str)
                 }
             };
 
-            return OsString::from(new_package);
+            OsString::from(new_package)
         })
         .collect();
 
@@ -229,9 +231,11 @@ fn collection_packages_name(args: &[OsString]) {
 
     let package_bin_names = get_package_bin_names(&npm_perfix, packages);
 
-    let mut global_names = UNINSTALL_PACKAGES_NAME.lock().unwrap();
-    for name in package_bin_names {
-        global_names.push(name);
+    if !package_bin_names.is_empty() {
+        let mut global_names = UNINSTALL_PACKAGES_NAME.lock().unwrap();
+        for name in package_bin_names {
+            global_names.push(name);
+        }
     }
 }
 

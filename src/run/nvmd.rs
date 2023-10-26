@@ -20,7 +20,7 @@ use crate::common::{NVMD_PATH, VERSION};
 #[command(name=env!("CARGO_PKG_NAME"), author=env!("CARGO_PKG_AUTHORS"), version=env!("CARGO_PKG_VERSION"), about="command tools for nvm-desktop", after_help="Please download new version of Node.js in nvm-desktop.", long_about = None)]
 #[command(help_template = "\
 {before-help}{name} ({version})
-{author-with-newline}{about-with-newline}
+{about-with-newline}
 {usage-heading} {usage}
 
 {all-args}{after-help}
