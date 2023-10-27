@@ -74,19 +74,13 @@ fn global_install_packages(args: &[OsString]) {
     let packages = &args
         .into_iter()
         .filter(is_positional)
-        .map(|x| {
-            let package = String::from(x.to_str().unwrap());
+        .map(|name| {
+            let package = name.to_str().unwrap();
 
-            let new_package = match re.find(&package) {
+            match re.find(&package) {
                 None => OsString::from(&package),
-                Some(mat) => {
-                    let str = &package[0..(mat.start())];
-
-                    OsString::from(str)
-                }
-            };
-
-            OsString::from(new_package)
+                Some(mat) => OsString::from(&package[0..(mat.start())]),
+            }
         })
         .collect();
 
@@ -117,25 +111,24 @@ fn record_installed_package(packages: &Vec<String>) {
     let mut packages_path = NVMD_PATH.clone();
     packages_path.push("packages.json");
 
+    let update_packages = || {
+        let mut json_obj = json!({});
+        for package in packages {
+            json_obj[package] = json!([*VERSION]);
+        }
+        let json_str = json_obj.to_string();
+        write_all(&packages_path, &json_str).unwrap();
+    };
+
     match read_to_string(&packages_path) {
         Err(_) => {
             // not exsit
-            let mut json_obj = json!({});
-            for package in packages {
-                json_obj[package] = json!([*VERSION]);
-            }
-            let json_str = json_obj.to_string();
-            write_all(packages_path, &json_str).unwrap();
+            update_packages();
         }
         Ok(content) => {
             // exsit
             if content.is_empty() {
-                let mut json_obj = json!({});
-                for package in packages {
-                    json_obj[package] = json!([*VERSION]);
-                }
-                let json_str = json_obj.to_string();
-                write_all(packages_path, &json_str).unwrap();
+                update_packages();
             } else {
                 let mut json_obj: Value = from_str(&content).unwrap();
                 for package in packages {
@@ -150,7 +143,7 @@ fn record_installed_package(packages: &Vec<String>) {
                     }
                 }
                 let json_str = json_obj.to_string();
-                write_all(packages_path, &json_str).unwrap();
+                write_all(&packages_path, &json_str).unwrap();
             }
         }
     };
@@ -211,19 +204,13 @@ fn collection_packages_name(args: &[OsString]) {
     let packages = &args
         .into_iter()
         .filter(is_positional)
-        .map(|x| {
-            let package = String::from(x.to_str().unwrap());
+        .map(|name| {
+            let package = name.to_str().unwrap();
 
-            let new_package = match re.find(&package) {
+            match re.find(&package) {
                 None => OsString::from(&package),
-                Some(mat) => {
-                    let str = &package[0..(mat.start())];
-
-                    OsString::from(str)
-                }
-            };
-
-            OsString::from(new_package)
+                Some(mat) => OsString::from(&package[0..(mat.start())]),
+            }
         })
         .collect();
 
@@ -259,7 +246,7 @@ fn get_npm_perfix() -> String {
         }
     }
 
-    return perfix;
+    perfix
 }
 
 fn get_package_bin_names(npm_perfix: &String, packages: &Vec<OsString>) -> Vec<String> {
@@ -291,7 +278,7 @@ fn get_package_bin_names(npm_perfix: &String, packages: &Vec<OsString>) -> Vec<S
         }
     }
 
-    return package_bin_names;
+    package_bin_names
 }
 
 #[cfg(unix)]
@@ -361,7 +348,7 @@ where
     A: AsRef<OsStr>,
 {
     match arg.as_ref().to_str() {
-        Some(a) => a.starts_with('-') || a == "install" || a == "uninstall",
+        Some(a) => a.starts_with('-') || a == "install" || a == "i" || a == "uninstall",
         None => false,
     }
 }
