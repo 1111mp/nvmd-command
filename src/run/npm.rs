@@ -30,6 +30,10 @@ lazy_static! {
 }
 
 pub(super) fn command(exe: &OsStr, args: &[OsString]) -> Result<ExitStatus, String> {
+    if ENV_PATH.is_empty() {
+        return Err(String::from("command not found: ") + exe.to_str().unwrap());
+    }
+
     let is_global = args.contains(&SHORT_GLOBAL) || args.contains(&GLOBAL);
     let is_global_uninstall = is_global && args.contains(&UNINSTALL);
 

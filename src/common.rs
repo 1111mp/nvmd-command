@@ -10,25 +10,24 @@ lazy_static! {
 }
 
 fn get_env_path() -> OsString {
+    if VERSION.is_empty() {
+        return OsString::from("");
+    }
+
     let bin_path = get_bin_path();
 
-    let path = match env::var_os("PATH") {
+    match env::var_os("PATH") {
         Some(path) => {
             let mut paths = env::split_paths(&path).collect::<Vec<_>>();
-
             paths.insert(0, PathBuf::from(bin_path));
 
-            let env_path = match env::join_paths(paths) {
+            match env::join_paths(paths) {
                 Ok(p) => p,
                 Err(_) => OsString::from(""),
-            };
-
-            return env_path;
+            }
         }
         None => bin_path,
-    };
-
-    return path;
+    }
 }
 
 fn get_bin_path() -> OsString {
@@ -40,9 +39,7 @@ fn get_bin_path() -> OsString {
         nvmd_path.push("bin");
     }
 
-    let bin_path = nvmd_path.into_os_string();
-
-    return bin_path;
+    nvmd_path.into_os_string()
 }
 
 fn get_version() -> String {
@@ -64,21 +61,17 @@ fn get_version() -> String {
     let mut default_path = NVMD_PATH.clone();
     default_path.push("default");
 
-    let default_version = match read_to_string(&default_path) {
+    match read_to_string(&default_path) {
         Err(_) => String::from(""),
         Ok(v) => v,
-    };
-
-    return default_version;
+    }
 }
 
 fn get_nvmd_path() -> PathBuf {
-    let nvmd_path = match default_home_dir() {
+    match default_home_dir() {
         Ok(p) => p,
         Err(_) => PathBuf::from(""),
-    };
-
-    return nvmd_path;
+    }
 }
 
 fn default_home_dir() -> Result<PathBuf, ErrorKind> {
