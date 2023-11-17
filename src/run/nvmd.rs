@@ -14,7 +14,7 @@ use std::os::windows::process::ExitStatusExt;
 use std::{cmp::Ordering, collections::HashSet, env};
 use version_compare::{compare, Cmp};
 
-use crate::common::{NVMD_PATH, VERSION};
+use crate::common::{INSTALLTION_PATH, NVMD_PATH, VERSION};
 
 #[derive(Parser)]
 #[command(name=env!("CARGO_PKG_NAME"), author=env!("CARGO_PKG_AUTHORS"), version=env!("CARGO_PKG_VERSION"), about="command tools for nvm-desktop", after_help="Please download new version of Node.js in nvm-desktop.", long_about = None)]
@@ -65,6 +65,7 @@ pub(super) fn command() -> Result<ExitStatus, String> {
             match command_for_list() {
                 Ok(()) => {}
                 Err(err) => {
+                    println!("{}", err.to_string());
                     return Err(err.to_string());
                 }
             };
@@ -86,13 +87,12 @@ pub(super) fn command() -> Result<ExitStatus, String> {
 }
 
 fn command_for_list() -> Result<(), Error> {
-    let mut install_path = NVMD_PATH.clone();
-    install_path.push("versions");
+    let install_path = INSTALLTION_PATH.clone();
 
     let mut config = HashSet::new();
     config.insert(DirEntryAttr::Name);
 
-    let ls_result = ls(install_path, &config)?;
+    let ls_result = ls(&install_path, &config)?;
     let mut versions: Vec<String> = vec![];
     for item in ls_result.items {
         match item.get(&DirEntryAttr::Name) {
@@ -227,8 +227,7 @@ fn command_for_which(ver: &String) {
         version.remove(0);
     }
 
-    let mut version_path = NVMD_PATH.clone();
-    version_path.push("versions");
+    let mut version_path = INSTALLTION_PATH.clone();
     version_path.push(&version);
     if cfg!(unix) {
         version_path.push("bin");
@@ -242,8 +241,7 @@ fn command_for_which(ver: &String) {
 }
 
 fn is_valid_version(version: &String) -> bool {
-    let mut version_path = NVMD_PATH.clone();
-    version_path.push("versions");
+    let mut version_path = INSTALLTION_PATH.clone();
     version_path.push(&version);
     if cfg!(windows) {
         version_path.push("node.exe");
