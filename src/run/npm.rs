@@ -318,7 +318,8 @@ fn link_package(name: &String) {
     let cmd = name.clone() + ".cmd";
     cmd_alias.push(cmd);
 
-    let options = CopyOptions::new(); //Initialize default values for CopyOptions
+    let mut options = CopyOptions::new(); //Initialize default values for CopyOptions
+    options.skip_exist = true; // Skip existing files if true (default: false).
     copy(&exe_source, &exe_alias, &options).unwrap();
     copy(&cmd_source, &cmd_alias, &options).unwrap();
 }

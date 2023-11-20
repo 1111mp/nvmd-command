@@ -2,10 +2,13 @@ use std::{env, ffi::OsString, io::ErrorKind, path::PathBuf, process::ExitStatus}
 
 use fs_extra::file::read_to_string;
 use lazy_static::lazy_static;
+use serde_json::{from_str, Value};
 
 lazy_static! {
     pub static ref NVMD_PATH: PathBuf = get_nvmd_path();
     pub static ref VERSION: String = get_version();
+    pub static ref DEFAULT_INSTALLTION_PATH: PathBuf = get_default_installtion_path();
+    pub static ref INSTALLTION_PATH: PathBuf = get_installtion_path();
     pub static ref ENV_PATH: OsString = get_env_path();
 }
 
@@ -15,6 +18,9 @@ fn get_env_path() -> OsString {
     }
 
     let bin_path = get_bin_path();
+    if !PathBuf::from(&bin_path).exists() {
+        return OsString::from("");
+    }
 
     match env::var_os("PATH") {
         Some(path) => {
@@ -31,8 +37,7 @@ fn get_env_path() -> OsString {
 }
 
 fn get_bin_path() -> OsString {
-    let mut nvmd_path = NVMD_PATH.clone();
-    nvmd_path.push("versions");
+    let mut nvmd_path = INSTALLTION_PATH.clone();
     nvmd_path.push(VERSION.clone());
 
     if cfg!(unix) {
@@ -40,6 +45,42 @@ fn get_bin_path() -> OsString {
     }
 
     nvmd_path.into_os_string()
+}
+
+// $HOME/.nvmd/setting.json -> directory
+fn get_installtion_path() -> PathBuf {
+    let mut setting_path = NVMD_PATH.clone();
+    setting_path.push("setting.json");
+
+    let setting_content = match read_to_string(&setting_path) {
+        Err(_) => String::from(""),
+        Ok(content) => content,
+    };
+
+    if setting_content.is_empty() {
+        return DEFAULT_INSTALLTION_PATH.clone();
+    }
+
+    let json_obj: Value = from_str(&setting_content).unwrap();
+
+    if json_obj.is_null() || !json_obj.is_object() {
+        return DEFAULT_INSTALLTION_PATH.clone();
+    }
+
+    if json_obj["directory"].is_null() || !json_obj["directory"].is_string() {
+        return DEFAULT_INSTALLTION_PATH.clone();
+    }
+
+    let directory = json_obj["directory"].as_str().unwrap();
+
+    PathBuf::from(directory)
+}
+
+fn get_default_installtion_path() -> PathBuf {
+    let mut default_path = NVMD_PATH.clone();
+    default_path.push("versions");
+
+    default_path
 }
 
 fn get_version() -> String {

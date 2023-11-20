@@ -2,12 +2,11 @@ use super::{ExitStatus, OsStr, OsString};
 
 use crate::{
     command as CommandTool,
-    common::{ENV_PATH, NVMD_PATH, VERSION},
+    common::{ENV_PATH, INSTALLTION_PATH, VERSION},
 };
 
 pub(super) fn command(exe: &OsStr, args: &[OsString]) -> Result<ExitStatus, String> {
-    let mut lib_path = NVMD_PATH.clone();
-    lib_path.push("versions");
+    let mut lib_path = INSTALLTION_PATH.clone();
     lib_path.push(VERSION.clone());
     if cfg!(unix) {
         // unix
