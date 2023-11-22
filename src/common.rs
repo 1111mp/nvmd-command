@@ -1,60 +1,23 @@
-use std::{
-    env,
-    ffi::OsString,
-    io::{BufRead, BufReader, ErrorKind},
-    path::PathBuf,
-    process::{ExitStatus, Stdio},
-};
+use std::{env, ffi::OsString, io::ErrorKind, path::PathBuf, process::ExitStatus};
 
 use fs_extra::file::read_to_string;
 use lazy_static::lazy_static;
 use serde_json::{from_str, Value};
-
-use crate::command as CommandTool;
 
 lazy_static! {
     pub static ref NVMD_PATH: PathBuf = get_nvmd_path();
     pub static ref VERSION: String = get_version();
     pub static ref DEFAULT_INSTALLTION_PATH: PathBuf = get_default_installtion_path();
     pub static ref INSTALLTION_PATH: PathBuf = get_installtion_path();
-    pub static ref NPM_PREFIX: PathBuf = get_npm_prefix();
-    pub static ref ENV_PATH: OsString = get_env_path(false);
-    pub static ref BINARY_ENV_PATH: OsString = get_env_path(true);
+    pub static ref ENV_PATH: OsString = get_env_path();
 }
 
-fn get_npm_prefix() -> PathBuf {
-    let mut command = CommandTool::create_command("npm");
-
-    let child = command
-        .env("PATH", ENV_PATH.clone())
-        .args(["config", "get", "prefix"])
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("nvmd-desktop: get npm perfix error");
-
-    let output = child.stdout.unwrap();
-    let lines = BufReader::new(output).lines();
-    let mut perfix = String::from("");
-    for line in lines {
-        let cur_line = line.unwrap();
-        if PathBuf::from(&cur_line).is_dir() {
-            perfix = cur_line;
-        }
-    }
-
-    PathBuf::from(perfix)
-}
-
-fn get_env_path(binary: bool) -> OsString {
+fn get_env_path() -> OsString {
     if VERSION.is_empty() {
         return OsString::from("");
     }
 
-    let bin_path = match Some(binary) {
-        Some(true) => get_binary_bin_path(),
-        Some(false) => get_bin_path(),
-        None => get_bin_path(),
-    };
+    let bin_path = get_bin_path();
 
     if !PathBuf::from(&bin_path).exists() {
         return OsString::from("");
@@ -77,16 +40,6 @@ fn get_env_path(binary: bool) -> OsString {
 fn get_bin_path() -> OsString {
     let mut nvmd_path = INSTALLTION_PATH.clone();
     nvmd_path.push(VERSION.clone());
-
-    if cfg!(unix) {
-        nvmd_path.push("bin");
-    }
-
-    nvmd_path.into_os_string()
-}
-
-fn get_binary_bin_path() -> OsString {
-    let mut nvmd_path = NPM_PREFIX.clone();
 
     if cfg!(unix) {
         nvmd_path.push("bin");

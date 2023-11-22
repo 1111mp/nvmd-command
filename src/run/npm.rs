@@ -353,7 +353,14 @@ where
     A: AsRef<OsStr>,
 {
     match arg.as_ref().to_str() {
-        Some(a) => a.starts_with('-') || a == "install" || a == "i" || a == "uninstall",
+        Some(a) => {
+            a.starts_with('-')
+                || a == "install"
+                || a == "i"
+                || a == "uninstall"
+                || a.starts_with("yarn")
+                || a.starts_with("pnpm")
+        }
         None => false,
     }
 }
