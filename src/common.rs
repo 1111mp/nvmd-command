@@ -157,6 +157,7 @@ pub fn package_can_be_removed(name: &String) -> bool {
     }
 }
 
+#[cfg(unix)]
 pub fn link_package(name: &String) {
     let mut source = NVMD_PATH.clone();
     source.push("bin");
