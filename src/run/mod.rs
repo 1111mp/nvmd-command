@@ -7,6 +7,7 @@ use std::{
 };
 
 mod binary;
+mod corepack;
 mod engine;
 mod npm;
 mod nvmd;
@@ -19,7 +20,8 @@ pub fn execute() -> Result<ExitStatus, String> {
     match exe.to_str() {
         Some("nvmd") => nvmd::command(),
         Some("npm") => npm::command(&exe, &args),
-        Some("node") | Some("npx") | Some("corepack") => engine::command(&exe, &args),
+        Some("corepack") => corepack::command(&exe, &args),
+        Some("node") | Some("npx") => engine::command(&exe, &args),
         _ => binary::command(&exe, &args),
     }
 }
