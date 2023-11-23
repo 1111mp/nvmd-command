@@ -1,8 +1,11 @@
-use std::{env, ffi::OsString, io::ErrorKind, path::PathBuf, process::ExitStatus};
-
-use fs_extra::file::read_to_string;
+#[cfg(windows)]
+use fs_extra::file::{copy, CopyOptions};
+use fs_extra::file::{read_to_string, remove};
 use lazy_static::lazy_static;
-use serde_json::{from_str, Value};
+use serde_json::{from_str, json, Value};
+#[cfg(unix)]
+use std::os::unix::fs;
+use std::{env, ffi::OsString, io::ErrorKind, path::PathBuf, process::ExitStatus};
 
 lazy_static! {
     pub static ref NVMD_PATH: PathBuf = get_nvmd_path();
@@ -114,6 +117,105 @@ fn get_nvmd_path() -> PathBuf {
         Ok(p) => p,
         Err(_) => PathBuf::from(""),
     }
+}
+
+pub fn package_can_be_removed(name: &String) -> bool {
+    let mut packages_path = NVMD_PATH.clone();
+    packages_path.push("packages.json");
+
+    match read_to_string(&packages_path) {
+        Err(_) => true,
+        Ok(content) => {
+            if content.is_empty() {
+                return true;
+            }
+
+            let json_obj: Value = from_str(&content).unwrap();
+
+            if json_obj.is_null() || !json_obj.is_object() {
+                return true;
+            }
+
+            if json_obj[name].is_null() || !json_obj[name].is_array() {
+                return true;
+            }
+
+            let versions = json_obj[name].as_array().unwrap();
+
+            if versions.is_empty() {
+                return true;
+            }
+
+            let target = json!(*VERSION);
+
+            if versions.len() == 1 && versions.contains(&target) {
+                return true;
+            }
+
+            false
+        }
+    }
+}
+
+pub fn link_package(name: &String) {
+    let mut source = NVMD_PATH.clone();
+    source.push("bin");
+    source.push("nvmd");
+    let mut alias = NVMD_PATH.clone();
+    alias.push("bin");
+    alias.push(name);
+
+    fs::symlink(source, alias).unwrap_or_else(|_why| {})
+}
+
+#[cfg(windows)]
+pub fn link_package(name: &String) {
+    // from
+    let mut exe_source = NVMD_PATH.clone();
+    exe_source.push("bin");
+    exe_source.push("nvmd.exe");
+    let mut cmd_source = NVMD_PATH.clone();
+    cmd_source.push("bin");
+    cmd_source.push("npm.cmd");
+
+    // to
+    let mut exe_alias = NVMD_PATH.clone();
+    exe_alias.push("bin");
+    let exe = name.clone() + ".exe";
+    exe_alias.push(exe);
+    let mut cmd_alias = NVMD_PATH.clone();
+    cmd_alias.push("bin");
+    let cmd = name.clone() + ".cmd";
+    cmd_alias.push(cmd);
+
+    let mut options = CopyOptions::new(); //Initialize default values for CopyOptions
+    options.skip_exist = true; // Skip existing files if true (default: false).
+    copy(&exe_source, &exe_alias, &options).unwrap();
+    copy(&cmd_source, &cmd_alias, &options).unwrap();
+}
+
+#[cfg(unix)]
+pub fn unlink_package(name: &String) {
+    let mut alias = NVMD_PATH.clone();
+    alias.push("bin");
+    alias.push(name);
+
+    remove(alias).unwrap_or_else(|_why| {});
+}
+
+#[cfg(windows)]
+pub fn unlink_package(name: &String) {
+    let mut exe_alias = NVMD_PATH.clone();
+    exe_alias.push("bin");
+    let exe = name.clone() + ".exe";
+    exe_alias.push(exe);
+    let mut cmd_alias = NVMD_PATH.clone();
+    cmd_alias.push("bin");
+    let cmd = name.clone() + ".cmd";
+    cmd_alias.push(cmd);
+
+    remove(exe_alias).unwrap_or_else(|_why| {});
+    remove(cmd_alias).unwrap_or_else(|_why| {});
 }
 
 fn default_home_dir() -> Result<PathBuf, ErrorKind> {
