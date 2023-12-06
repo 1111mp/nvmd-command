@@ -267,7 +267,7 @@ fn get_package_bin_names(npm_perfix: &String, packages: &Vec<OsString>) -> Vec<S
             let bin = &json["bin"];
 
             if bin.is_string() {
-                let name = json["bin"].as_str().unwrap();
+                let name = json["name"].as_str().unwrap();
                 package_bin_names.push(String::from(name));
             } else {
                 let keys = json["bin"].as_object().unwrap();
