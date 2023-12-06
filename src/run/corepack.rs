@@ -39,7 +39,6 @@ pub(super) fn command(exe: &OsStr, args: &[OsString]) -> Result<ExitStatus, Stri
             // corepack enable ..
             // No special handling is required when using the "--install-directory" option
             if args.contains(&ENABLE) && !install_directory {
-                // let packages = &args.into_iter().filter(is_positional).collect();
                 corepack_enable(args);
             }
 
