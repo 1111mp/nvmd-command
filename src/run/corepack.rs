@@ -61,7 +61,7 @@ fn corepack_enable(args: &[OsString]) {
         .map(|name| String::from(name.to_str().unwrap()))
         .collect::<Vec<String>>();
 
-    if packages.is_empty() {
+    if packages.is_empty() && !args.contains(&OsString::from("npm")) {
         packages.push(String::from("yarn"));
         packages.push(String::from("pnpm"));
     }
@@ -84,7 +84,7 @@ fn corepack_disable(args: &[OsString]) {
         .map(|name| String::from(name.to_str().unwrap()))
         .collect::<Vec<String>>();
 
-    if packages.is_empty() {
+    if packages.is_empty() && !args.contains(&OsString::from("npm")) {
         packages.push(String::from("yarn"));
         packages.push(String::from("pnpm"));
     }

@@ -12,7 +12,7 @@ use std::{
 use super::{ExitStatus, OsStr, OsString};
 use crate::{
     command as CommandTool,
-    common::{link_package, unlink_package, ENV_PATH, NVMD_PATH, VERSION},
+    common::{link_package, unlink_package, ENV_PATH, INSTALLTION_PATH, NVMD_PATH, VERSION},
 };
 
 lazy_static! {
@@ -29,6 +29,18 @@ lazy_static! {
 
 pub(super) fn command(exe: &OsStr, args: &[OsString]) -> Result<ExitStatus, String> {
     if ENV_PATH.is_empty() {
+        return Err(String::from("command not found: ") + exe.to_str().unwrap());
+    }
+
+    let mut lib_path = INSTALLTION_PATH.clone();
+    lib_path.push(VERSION.clone());
+    if cfg!(unix) {
+        // unix
+        lib_path.push("bin");
+    }
+    lib_path.push(exe);
+
+    if !lib_path.exists() {
         return Err(String::from("command not found: ") + exe.to_str().unwrap());
     }
 
