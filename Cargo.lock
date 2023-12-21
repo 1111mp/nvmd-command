@@ -307,7 +307,7 @@ dependencies = [
 
 [[package]]
 name = "nvmd"
-version = "2.6.1"
+version = "2.6.2"
 dependencies = [
  "cfg-if",
  "chrono",
