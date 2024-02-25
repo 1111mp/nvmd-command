@@ -88,12 +88,7 @@ fn get_default_installtion_path() -> PathBuf {
 }
 
 fn get_version() -> String {
-    let mut nvmdrc = match env::current_dir() {
-        Err(_) => PathBuf::from(""),
-        Ok(dir) => dir,
-    };
-    nvmdrc.push(".nvmdrc");
-
+    let nvmdrc = find_nvmdrc();
     let project_version = match read_to_string(&nvmdrc) {
         Err(_) => String::from(""),
         Ok(v) => v,
@@ -110,6 +105,24 @@ fn get_version() -> String {
         Err(_) => String::from(""),
         Ok(v) => v,
     }
+}
+
+fn find_nvmdrc() -> PathBuf {
+    let mut current_dir = match env::current_dir() {
+        Ok(dir) => dir,
+        Err(_) => PathBuf::from(""),
+    };
+    current_dir.push(".nvmdrc");
+
+    while current_dir.pop() {
+        let mut nvmdrc = current_dir.clone();
+        nvmdrc.push(".nvmdrc");
+        if nvmdrc.is_file() {
+            return nvmdrc;
+        }
+    }
+
+    PathBuf::from("")
 }
 
 fn get_nvmd_path() -> PathBuf {
