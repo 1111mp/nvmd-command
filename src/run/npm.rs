@@ -3,7 +3,7 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use serde_json::{from_str, json, Value};
 use std::{
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Error},
     path::PathBuf,
     process::Stdio,
     sync::Mutex,
@@ -16,16 +16,21 @@ use crate::{
 };
 
 lazy_static! {
-    static ref INSTALL: OsString = OsString::from("install");
-    static ref SHORT_INSTALL: OsString = OsString::from("i");
-    static ref UNINSTALL: OsString = OsString::from("uninstall");
-    static ref GLOBAL: OsString = OsString::from("--global");
-    static ref SHORT_GLOBAL: OsString = OsString::from("-g");
     pub static ref UNINSTALL_PACKAGES_NAME: Mutex<Vec<String>> = {
         let m = Vec::new();
         Mutex::new(m)
     };
 }
+
+/// Aliases that npm supports for the 'install' command
+const NPM_INSTALL_ALIASES: [&str; 12] = [
+    "i", "in", "ins", "inst", "insta", "instal", "install", "isnt", "isnta", "isntal", "isntall",
+    "add",
+];
+/// Aliases that npm supports for the 'uninstall' command
+const NPM_UNINSTALL_ALIASES: [&str; 5] = ["un", "uninstall", "remove", "rm", "r"];
+/// Aliases that npm supports for the 'link' command
+const NPM_LINK_ALIASES: [&str; 2] = ["link", "ln"];
 
 pub(super) fn command(exe: &OsStr, args: &[OsString]) -> Result<ExitStatus, String> {
     if ENV_PATH.is_empty() {
@@ -44,42 +49,61 @@ pub(super) fn command(exe: &OsStr, args: &[OsString]) -> Result<ExitStatus, Stri
         return Err(String::from("command not found: ") + exe.to_str().unwrap());
     }
 
-    let is_global = args.contains(&SHORT_GLOBAL) || args.contains(&GLOBAL);
-    let is_global_uninstall = is_global && args.contains(&UNINSTALL);
+    let mut positionals = args.iter().filter(is_positional).map(|arg| arg.as_os_str());
 
-    // for npm uninstall -g packages
-    // collection the bin names of packages
-    if is_global_uninstall {
-        collection_packages_name(args);
-    }
+    let child = match positionals.next() {
+        Some(cmd) if NPM_INSTALL_ALIASES.iter().any(|a| a == &cmd) => {
+            let child = executor(exe, args);
 
-    let child = CommandTool::create_command(exe)
-        .env("PATH", ENV_PATH.clone())
-        .args(args)
-        .status();
-
-    // npm install/uninstall -g packages
-
-    match child {
-        Ok(status) => {
-            if status.success() {
-                let is_global_install =
-                    is_global && (args.contains(&INSTALL) || args.contains(&SHORT_INSTALL));
-                // npm install -g packages
-                if is_global_install {
-                    global_install_packages(args);
-                }
-
-                // npm uninstall -g packages
-                if is_global_uninstall {
-                    global_uninstall_packages();
-                }
+            if has_global(args) {
+                global_install_packages(args);
             }
 
-            Ok(status)
+            child
         }
+        Some(cmd) if NPM_UNINSTALL_ALIASES.iter().any(|a| a == &cmd) => {
+            let has_global = has_global(args);
+
+            if has_global {
+                collection_packages_name(args);
+            }
+
+            let child = executor(exe, args);
+
+            if has_global {
+                global_uninstall_packages();
+            }
+
+            child
+        }
+        _ => executor(exe, args),
+    };
+
+    match child {
+        Ok(status) => Ok(status),
         Err(_) => Err(String::from("failed to execute process")),
     }
+}
+
+fn executor<A>(exe: &OsStr, args: &[A]) -> Result<ExitStatus, Error>
+where
+    A: AsRef<OsStr>,
+{
+    CommandTool::create_command(exe)
+        .env("PATH", ENV_PATH.clone())
+        .args(args)
+        .status()
+}
+
+fn has_global<A>(args: &[A]) -> bool
+where
+    A: AsRef<OsStr>,
+{
+    args.iter()
+        .fold(false, |global, arg| match arg.as_ref().to_str() {
+            Some("-g") | Some("--global") => true,
+            _ => global,
+        })
 }
 
 fn global_install_packages(args: &[OsString]) {
