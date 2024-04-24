@@ -3,6 +3,7 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use serde_json::{from_str, json, Value};
 use std::{
+    env,
     io::{BufRead, BufReader, Error},
     path::PathBuf,
     process::Stdio,
@@ -31,6 +32,8 @@ const NPM_INSTALL_ALIASES: [&str; 12] = [
 const NPM_UNINSTALL_ALIASES: [&str; 5] = ["un", "uninstall", "remove", "rm", "r"];
 /// Aliases that npm supports for the 'link' command
 const NPM_LINK_ALIASES: [&str; 2] = ["link", "ln"];
+/// Aliases that npm supports for the `update` command
+const NPM_UPDATE_ALIASES: [&str; 4] = ["update", "udpate", "upgrade", "up"];
 
 pub(super) fn command(exe: &OsStr, args: &[OsString]) -> Result<ExitStatus, String> {
     if ENV_PATH.is_empty() {
@@ -53,28 +56,24 @@ pub(super) fn command(exe: &OsStr, args: &[OsString]) -> Result<ExitStatus, Stri
 
     let child = match positionals.next() {
         Some(cmd) if NPM_INSTALL_ALIASES.iter().any(|a| a == &cmd) => {
-            let child = executor(exe, args);
-
-            if has_global(args) {
-                global_install_packages(args);
-            }
-
-            child
+            let tools: Vec<_> = positionals.collect();
+            command_install_executor(exe, args, tools)
         }
         Some(cmd) if NPM_UNINSTALL_ALIASES.iter().any(|a| a == &cmd) => {
-            let has_global = has_global(args);
-
-            if has_global {
-                collection_packages_name(args);
-            }
-
-            let child = executor(exe, args);
-
-            if has_global {
-                global_uninstall_packages();
-            }
-
-            child
+            let tools: Vec<_> = positionals.collect();
+            command_uninstall_executor(exe, args, tools)
+        }
+        Some(cmd) if cmd == "unlink" => {
+            let tools: Vec<_> = positionals.collect();
+            command_unlink_executor(exe, args, tools)
+        }
+        Some(cmd) if NPM_LINK_ALIASES.iter().any(|a| a == &cmd) => {
+            let tools: Vec<_> = positionals.collect();
+            command_link_executor(exe, args, tools)
+        }
+        Some(cmd) if NPM_UPDATE_ALIASES.iter().any(|a| a == &cmd) => {
+            let tools: Vec<_> = positionals.collect();
+            command_update_executor(exe, args, tools)
         }
         _ => executor(exe, args),
     };
@@ -83,6 +82,91 @@ pub(super) fn command(exe: &OsStr, args: &[OsString]) -> Result<ExitStatus, Stri
         Ok(status) => Ok(status),
         Err(_) => Err(String::from("failed to execute process")),
     }
+}
+
+/// npm instll command
+fn command_install_executor(
+    exe: &OsStr,
+    args: &[OsString],
+    tools: Vec<&OsStr>,
+) -> Result<ExitStatus, Error> {
+    let status = executor(exe, args)?;
+
+    if status.success() && command_has_global(args) {
+        global_install_packages(tools);
+    }
+
+    Ok(status)
+}
+
+/// npm uninstll command
+fn command_uninstall_executor(
+    exe: &OsStr,
+    args: &[OsString],
+    tools: Vec<&OsStr>,
+) -> Result<ExitStatus, Error> {
+    let has_global = command_has_global(args);
+    if has_global {
+        collection_packages_name(tools);
+    }
+
+    let status = executor(exe, args)?;
+
+    if status.success() && has_global {
+        global_uninstall_packages();
+    }
+
+    Ok(status)
+}
+
+/// npm unlink command
+fn command_unlink_executor(
+    exe: &OsStr,
+    args: &[OsString],
+    tools: Vec<&OsStr>,
+) -> Result<ExitStatus, Error> {
+    let has_global = command_has_global(args);
+    if has_global {
+        collection_packages_name_for_unlink(tools)?;
+    }
+
+    let status = executor(exe, args)?;
+
+    if status.success() && has_global {
+        global_uninstall_packages();
+    }
+
+    Ok(status)
+}
+
+/// npm link command
+fn command_link_executor(
+    exe: &OsStr,
+    args: &[OsString],
+    tools: Vec<&OsStr>,
+) -> Result<ExitStatus, Error> {
+    let status = executor(exe, args)?;
+
+    if status.success() {
+        global_link_packages(tools)?;
+    }
+
+    Ok(status)
+}
+
+/// npm update command
+fn command_update_executor(
+    exe: &OsStr,
+    args: &[OsString],
+    tools: Vec<&OsStr>,
+) -> Result<ExitStatus, Error> {
+    let status = executor(exe, args)?;
+
+    if status.success() && command_has_global(args) {
+        global_install_packages(tools);
+    }
+
+    Ok(status)
 }
 
 fn executor<A>(exe: &OsStr, args: &[A]) -> Result<ExitStatus, Error>
@@ -95,7 +179,7 @@ where
         .status()
 }
 
-fn has_global<A>(args: &[A]) -> bool
+fn command_has_global<A>(args: &[A]) -> bool
 where
     A: AsRef<OsStr>,
 {
@@ -106,24 +190,36 @@ where
         })
 }
 
-fn global_install_packages(args: &[OsString]) {
+fn global_link_packages(tools: Vec<&OsStr>) -> Result<(), Error> {
+    let package_bin_names = get_package_bin_names_for_link(tools)?;
+
+    if !package_bin_names.is_empty() {
+        record_installed_package(&package_bin_names);
+
+        for name in &package_bin_names {
+            link_package(name);
+        }
+    }
+
+    Ok(())
+}
+
+fn global_install_packages(tools: Vec<&OsStr>) {
     let re_str = "@[0-9]|@latest|@\"|@npm:";
     let re: Regex = Regex::new(re_str).unwrap();
-    let packages = &args
-        .into_iter()
-        .filter(is_positional)
+    let packages = &tools
+        .iter()
         .map(|name| {
             let package = name.to_str().unwrap();
 
             match re.find(&package) {
-                None => OsString::from(&package),
-                Some(mat) => OsString::from(&package[0..(mat.start())]),
+                None => OsStr::new(package),
+                Some(mat) => OsStr::new(&package[0..(mat.start())]),
             }
         })
         .collect();
 
     let npm_perfix = get_npm_perfix();
-
     let package_bin_names = get_package_bin_names(&npm_perfix, packages);
 
     if !package_bin_names.is_empty() {
@@ -235,24 +331,25 @@ fn record_uninstall_package(name: &String) -> bool {
     }
 }
 
-fn collection_packages_name(args: &[OsString]) {
-    let re: Regex = Regex::new(r"@[0-9]|@latest").unwrap();
-    let packages = &args
-        .into_iter()
-        .filter(is_positional)
-        .map(|name| {
-            let package = name.to_str().unwrap();
+/// For unlink, should to find the current project name when without package argument.
+fn collection_packages_name_for_unlink(tools: Vec<&OsStr>) -> Result<(), Error> {
+    let npm_perfix = get_npm_perfix();
+    let package_bin_names = get_package_bin_names_for_unlink(tools, &npm_perfix)?;
 
-            match re.find(&package) {
-                None => OsString::from(&package),
-                Some(mat) => OsString::from(&package[0..(mat.start())]),
-            }
-        })
-        .collect();
+    if !package_bin_names.is_empty() {
+        let mut global_names = UNINSTALL_PACKAGES_NAME.lock().unwrap();
+        for name in package_bin_names {
+            global_names.push(name);
+        }
+    }
 
+    Ok(())
+}
+
+fn collection_packages_name(tools: Vec<&OsStr>) {
     let npm_perfix = get_npm_perfix();
 
-    let package_bin_names = get_package_bin_names(&npm_perfix, packages);
+    let package_bin_names = get_package_bin_names(&npm_perfix, &tools);
 
     if !package_bin_names.is_empty() {
         let mut global_names = UNINSTALL_PACKAGES_NAME.lock().unwrap();
@@ -285,7 +382,77 @@ fn get_npm_perfix() -> String {
     perfix
 }
 
-fn get_package_bin_names(npm_perfix: &String, packages: &Vec<OsString>) -> Vec<String> {
+fn get_package_bin_names_for_unlink(
+    tools: Vec<&OsStr>,
+    npm_perfix: &String,
+) -> Result<Vec<String>, Error> {
+    if tools.is_empty() {
+        return Ok(get_package_bin_names_from_curdir()?);
+    }
+
+    Ok(get_package_bin_names(npm_perfix, &tools))
+}
+
+fn get_package_bin_names_for_link(tools: Vec<&OsStr>) -> Result<Vec<String>, Error> {
+    if tools.is_empty() {
+        return Ok(get_package_bin_names_from_curdir()?);
+    }
+
+    let re_str = "@[0-9]|@latest|@\"|@npm:";
+    let re: Regex = Regex::new(re_str).unwrap();
+    let npm_perfix = get_npm_perfix();
+    let packages = &tools
+        .iter()
+        .map(|name| {
+            let package = name.to_str().unwrap();
+
+            match re.find(&package) {
+                None => OsStr::new(package),
+                Some(mat) => OsStr::new(&package[0..(mat.start())]),
+            }
+        })
+        .collect();
+
+    Ok(get_package_bin_names(&npm_perfix, &packages))
+}
+
+/// find package bin names for npm link/unlink command
+fn get_package_bin_names_from_curdir() -> Result<Vec<String>, Error> {
+    let mut package_bin_names: Vec<String> = vec![];
+
+    let mut package_json = env::current_dir()?;
+    package_json.push("package.json");
+
+    let json_str = match read_to_string(&package_json) {
+        Err(_) => String::from(""),
+        Ok(v) => v,
+    };
+
+    if json_str.is_empty() {
+        return Ok(package_bin_names);
+    }
+
+    let json: Value = serde_json::from_str(&json_str).unwrap();
+    let bin = &json["bin"];
+
+    if bin.is_null() {
+        return Ok(package_bin_names);
+    }
+
+    if bin.is_string() {
+        let name = json["name"].as_str().unwrap();
+        package_bin_names.push(String::from(name));
+    } else {
+        let keys = json["bin"].as_object().unwrap();
+        for (key, _val) in keys {
+            package_bin_names.push(String::from(key));
+        }
+    }
+
+    Ok(package_bin_names)
+}
+
+fn get_package_bin_names(npm_perfix: &String, packages: &Vec<&OsStr>) -> Vec<String> {
     let mut package_bin_names: Vec<String> = vec![];
 
     for package in packages {
@@ -298,18 +465,24 @@ fn get_package_bin_names(npm_perfix: &String, packages: &Vec<OsString>) -> Vec<S
             Ok(v) => v,
         };
 
-        if !json_str.is_empty() {
-            let json: Value = serde_json::from_str(&json_str).unwrap();
-            let bin = &json["bin"];
+        if json_str.is_empty() {
+            continue;
+        }
 
-            if bin.is_string() {
-                let name = json["name"].as_str().unwrap();
-                package_bin_names.push(String::from(name));
-            } else {
-                let keys = json["bin"].as_object().unwrap();
-                for (key, _val) in keys {
-                    package_bin_names.push(String::from(key));
-                }
+        let json: Value = serde_json::from_str(&json_str).unwrap();
+        let bin = &json["bin"];
+
+        if bin.is_null() {
+            continue;
+        }
+
+        if bin.is_string() {
+            let name = json["name"].as_str().unwrap();
+            package_bin_names.push(String::from(name));
+        } else {
+            let keys = json["bin"].as_object().unwrap();
+            for (key, _val) in keys {
+                package_bin_names.push(String::from(key));
             }
         }
     }
@@ -322,7 +495,7 @@ where
     A: AsRef<OsStr>,
 {
     match arg.as_ref().to_str() {
-        Some(a) => a.starts_with('-') || a == "install" || a == "i" || a == "uninstall",
+        Some(a) => a.starts_with('-'),
         None => false,
     }
 }
