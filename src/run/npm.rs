@@ -393,6 +393,9 @@ fn get_package_bin_names_for_unlink(
     Ok(get_package_bin_names(npm_perfix, &tools))
 }
 
+/// The link command supports execution from the current package directory without parameters.
+/// It also supports execution using the relative directory of the package as a parameter.
+/// Finally, the package name is passed in directly, similar to the "install" command.
 fn get_package_bin_names_for_link(tools: Vec<&OsStr>) -> Result<Vec<String>, Error> {
     if tools.is_empty() {
         return Ok(get_package_bin_names_from_curdir()?);
@@ -404,8 +407,11 @@ fn get_package_bin_names_for_link(tools: Vec<&OsStr>) -> Result<Vec<String>, Err
     let packages = &tools
         .iter()
         .map(|name| {
-            let package = name.to_str().unwrap();
+            if PathBuf::from(name).is_relative() {
+                return *name;
+            }
 
+            let package = name.to_str().unwrap();
             match re.find(&package) {
                 None => OsStr::new(package),
                 Some(mat) => OsStr::new(&package[0..(mat.start())]),
@@ -413,10 +419,54 @@ fn get_package_bin_names_for_link(tools: Vec<&OsStr>) -> Result<Vec<String>, Err
         })
         .collect();
 
-    Ok(get_package_bin_names(&npm_perfix, &packages))
+    bin_names_for_link(&npm_perfix, &packages)
 }
 
-/// find package bin names for npm link/unlink command
+fn bin_names_for_link(npm_perfix: &String, packages: &Vec<&OsStr>) -> Result<Vec<String>, Error> {
+    let mut package_bin_names: Vec<String> = vec![];
+    for package in packages {
+        let mut package_json = if PathBuf::from(package).is_relative() {
+            let mut cur_dir = env::current_dir()?;
+            cur_dir.push(package);
+            cur_dir.canonicalize()?
+        } else {
+            let mut path = PathBuf::from(npm_perfix);
+            path.push(package);
+            path
+        };
+        package_json.push("package.json");
+
+        let json_str = match read_to_string(&package_json) {
+            Err(_) => String::from(""),
+            Ok(v) => v,
+        };
+
+        if json_str.is_empty() {
+            continue;
+        }
+
+        let json: Value = serde_json::from_str(&json_str).unwrap();
+        let bin = &json["bin"];
+
+        if bin.is_null() {
+            continue;
+        }
+
+        if bin.is_string() {
+            let name = json["name"].as_str().unwrap();
+            package_bin_names.push(String::from(name));
+        } else {
+            let keys = json["bin"].as_object().unwrap();
+            for (key, _val) in keys {
+                package_bin_names.push(String::from(key));
+            }
+        }
+    }
+
+    Ok(package_bin_names)
+}
+
+/// find package bin namesc from current dir for npm link/unlink command
 fn get_package_bin_names_from_curdir() -> Result<Vec<String>, Error> {
     let mut package_bin_names: Vec<String> = vec![];
 
