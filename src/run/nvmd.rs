@@ -1,9 +1,9 @@
 use super::ExitStatus;
+use anyhow::{anyhow, Result};
 use chrono::Local;
 use clap::{Parser, Subcommand};
 use fs_extra::{
     dir::{ls, DirEntryAttr, DirEntryValue},
-    error::Error,
     file::{read_to_string, write_all},
 };
 use serde_json::{from_str, json, Value};
@@ -11,7 +11,7 @@ use serde_json::{from_str, json, Value};
 use std::os::unix::process::ExitStatusExt;
 #[cfg(windows)]
 use std::os::windows::process::ExitStatusExt;
-use std::{cmp::Ordering, collections::HashSet, env};
+use std::{cmp::Ordering, collections::HashSet, env, path::PathBuf};
 use version_compare::{compare, Cmp};
 
 use crate::common::{INSTALLTION_PATH, NVMD_PATH, VERSION};
@@ -35,9 +35,17 @@ enum Commands {
     /// Get the currently used version
     Current {},
     /// List the all installed versions of Node.js
-    List {},
+    List {
+        /// List tha all groups of the project
+        #[arg(short, long)]
+        group: bool,
+    },
     /// List the all installed versions of Node.js
-    Ls {},
+    Ls {
+        /// List tha all groups of the project
+        #[arg(short, long)]
+        group: bool,
+    },
     /// Use the installed version of Node.js (default is global)
     Use {
         /// The version number of Node.js
@@ -57,36 +65,51 @@ enum Commands {
 pub(super) fn command() -> Result<ExitStatus, String> {
     let cli = Cli::parse();
 
-    match &cli.command {
-        Some(Commands::Current {}) => {
-            eprintln!("v{}", *VERSION);
-        }
-        Some(Commands::Ls {}) | Some(Commands::List {}) => {
-            match command_for_list() {
-                Ok(()) => {}
-                Err(err) => {
-                    println!("{}", err.to_string());
-                    return Err(err.to_string());
-                }
-            };
+    let ret = match &cli.command {
+        Some(Commands::Current {}) => command_for_current(),
+        Some(Commands::Ls { group }) | Some(Commands::List { group }) => {
+            if *group {
+                command_for_list_group()
+            } else {
+                command_for_list()
+            }
         }
         Some(Commands::Use { version, project }) => {
             if *project {
-                command_for_use_project(version);
+                command_for_use_project(version)
             } else {
-                command_for_use_global(version);
+                command_for_use_global(version)
             }
         }
-        Some(Commands::Which { version }) => {
-            command_for_which(version);
-        }
-        None => {}
+        Some(Commands::Which { version }) => command_for_which(version),
+        None => Ok(()),
     };
 
-    Ok(ExitStatus::from_raw(0))
+    match ret {
+        Ok(_) => Ok(ExitStatus::from_raw(0)),
+        Err(err) => Err(err.to_string()),
+    }
 }
 
-fn command_for_list() -> Result<(), Error> {
+fn command_for_current() -> Result<()> {
+    eprintln!("v{}", *VERSION);
+    Ok(())
+}
+
+fn command_for_list_group() -> Result<()> {
+    if let Some(groups) = get_groups()? {
+        for group in &groups {
+            if let (Some(name), Some(version)) = (group["name"].as_str(), group["version"].as_str())
+            {
+                eprintln!("{} v{}", name, version);
+            }
+        }
+    };
+
+    Ok(())
+}
+
+fn command_for_list() -> Result<()> {
     let install_path = INSTALLTION_PATH.clone();
 
     let mut config = HashSet::new();
@@ -122,7 +145,11 @@ fn command_for_list() -> Result<(), Error> {
     Ok(())
 }
 
-fn command_for_use_global(ver: &String) {
+fn command_for_use_global(ver: &String) -> Result<()> {
+    if is_group_name(ver)? {
+        return Err(anyhow!("{} can only be used for projects", ver));
+    }
+
     let mut version = ver.to_owned();
     if version.starts_with("v") {
         version.remove(0);
@@ -130,34 +157,44 @@ fn command_for_use_global(ver: &String) {
 
     if !is_valid_version(&version) {
         eprintln!("nvm-desktop: v{} has not been installed", &version);
-        return;
+        return Ok(());
     }
 
     let mut default_path = NVMD_PATH.clone();
     default_path.push("default");
 
-    match write_all(default_path, &version) {
-        Ok(()) => {
-            eprintln!("Now using node v{}", &version);
-        }
-        Err(err) => {
-            eprintln!("nvm-desktop: {}", err);
-        }
-    };
+    write_all(default_path, &version)?;
+    eprintln!("Now using node v{}", &version);
+
+    Ok(())
 }
 
-fn command_for_use_project(ver: &String) {
-    let mut version = ver.to_owned();
+fn command_for_use_project(input_ver: &String) -> Result<()> {
+    // input_ver may be a version number or a group name
+    let is_group = is_group_name(input_ver)?;
+    let mut version = if is_group {
+        if let Some(version) = get_version_from_group(input_ver)? {
+            version
+        } else {
+            return Err(anyhow!(
+                "the nodejs version of the {} has not been set yet",
+                input_ver
+            ));
+        }
+    } else {
+        input_ver.to_owned()
+    };
+
     if version.starts_with("v") {
         version.remove(0);
     }
 
     if !is_valid_version(&version) {
         eprintln!("nvm-desktop: v{} has not been installed", &version);
-        return;
+        return Ok(());
     }
 
-    let mut nvmdrc_path = env::current_dir().unwrap();
+    let mut nvmdrc_path = env::current_dir()?;
     let project_name = nvmdrc_path
         .file_name()
         .map(|name| name.to_str().unwrap())
@@ -167,61 +204,90 @@ fn command_for_use_project(ver: &String) {
     let mut projects_path = NVMD_PATH.clone();
     projects_path.push("projects.json");
 
-    let update_projects = || {
-        let mut pro_obj = json!({});
+    let update_projects = || -> Result<()> {
+        let mut project = json!({});
         let now = Local::now().to_string();
-        pro_obj["name"] = json!(project_name);
-        pro_obj["path"] = json!(nvmdrc_path);
-        pro_obj["version"] = json!(version);
-        pro_obj["active"] = json!(true);
-        pro_obj["createAt"] = json!(now);
-        pro_obj["updateAt"] = json!(now);
+        project["name"] = json!(project_name);
+        project["path"] = json!(nvmdrc_path);
+        project["version"] = if is_group {
+            json!(input_ver)
+        } else {
+            json!(version)
+        };
+        project["active"] = json!(true);
+        project["createAt"] = json!(now);
+        project["updateAt"] = json!(now);
 
         let mut json_obj = json!([]);
-        json_obj.as_array_mut().unwrap().push(pro_obj);
+        if let Some(projects) = json_obj.as_array_mut() {
+            projects.push(project);
+        }
 
         let json_str = json_obj.to_string();
-        write_all(&projects_path, &json_str).unwrap();
+        write_all(&projects_path, &json_str)?;
+
+        Ok(())
     };
 
-    match read_to_string(&projects_path) {
-        Ok(content) => {
-            if content.is_empty() {
-                update_projects();
-            } else {
-                let mut json_obj: Value = from_str(&content).unwrap();
-                let projects = json_obj.as_array_mut().unwrap();
-                for project in projects {
-                    let name = project["name"].as_str().unwrap();
+    let json_str = read_to_string(&projects_path)?;
+    if json_str.is_empty() {
+        update_projects()?;
+    } else {
+        let mut json_obj: Value = from_str(&json_str)?;
+        let mut not_exist: bool = true;
+        if let Some(projects) = json_obj.as_array_mut() {
+            for project in projects.iter_mut() {
+                if let Some(name) = project["name"].as_str() {
                     if name == project_name {
-                        project["version"] = json!(version);
+                        not_exist = false;
+                        project["version"] = if is_group {
+                            json!(input_ver)
+                        } else {
+                            json!(version)
+                        };
                         project["updateAt"] = json!(Local::now().to_string());
                     }
                 }
+            }
 
-                let json_str = json_obj.to_string();
-                write_all(&projects_path, &json_str).unwrap();
+            if not_exist {
+                let mut project = json!({});
+                let now = Local::now().to_string();
+                project["name"] = json!(project_name);
+                project["path"] = json!(nvmdrc_path);
+                project["version"] = if is_group {
+                    json!(input_ver)
+                } else {
+                    json!(version)
+                };
+                project["active"] = json!(true);
+                project["createAt"] = json!(now);
+                project["updateAt"] = json!(now);
+
+                projects.insert(0, project);
             }
         }
-        Err(_) => {
-            update_projects();
-        }
-    };
+        write_all(&projects_path, &json_obj.to_string())?;
+    }
+
+    // update groups.json
+    if is_group {
+        update_groups_file(input_ver, &nvmdrc_path)?;
+    }
 
     // update .nvmdrc
     nvmdrc_path.push(".nvmdrc");
+    write_all(nvmdrc_path, &version)?;
+    if is_group {
+        eprintln!("Now using node v{} ({})", &version, input_ver);
+    } else {
+        eprintln!("Now using node v{}", &version);
+    }
 
-    match write_all(nvmdrc_path, &version) {
-        Ok(()) => {
-            eprintln!("Now using node v{}", &version);
-        }
-        Err(err) => {
-            eprintln!("nvm-desktop: {}", err);
-        }
-    };
+    Ok(())
 }
 
-fn command_for_which(ver: &String) {
+fn command_for_which(ver: &String) -> Result<()> {
     let mut version = ver.to_owned();
     if version.starts_with("v") {
         version.remove(0);
@@ -238,6 +304,79 @@ fn command_for_which(ver: &String) {
     } else {
         eprintln!("nvm-desktop: the version cannot be found: v{}", &version);
     }
+
+    Ok(())
+}
+
+fn update_groups_file(group_name: &String, project_path: &PathBuf) -> Result<()> {
+    let mut groups_json = NVMD_PATH.clone();
+    groups_json.push("groups.json");
+
+    // "$HOMEPATH/.nvmd/groups.json" must be exist
+    let json_str = read_to_string(&groups_json)?;
+    let mut json_obj: Value = from_str(&json_str)?;
+    let project_path_json = json!(project_path);
+    if let Some(groups) = json_obj.as_array_mut() {
+        for group in groups.iter_mut() {
+            if let Some(name) = group["name"].as_str() {
+                if name == group_name {
+                    if let Some(projects) = group["projects"].as_array_mut() {
+                        if !projects.contains(&project_path_json) {
+                            projects.push(project_path_json.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    write_all(&groups_json, &json_obj.to_string())?;
+
+    Ok(())
+}
+
+/// get the version of group
+fn get_version_from_group(group_name: &String) -> Result<Option<String>> {
+    if let Some(groups) = get_groups()? {
+        for group in &groups {
+            if let Some(name) = group["name"].as_str() {
+                if group_name == name {
+                    if let Some(version) = group["version"].as_str() {
+                        return Ok(Some(version.to_string()));
+                    }
+                }
+            }
+        }
+    };
+
+    Ok(None)
+}
+
+fn is_group_name(version: &String) -> Result<bool> {
+    if let Some(groups) = get_groups()? {
+        for group in &groups {
+            if let Some(name) = group["name"].as_str() {
+                if version == name {
+                    return Ok(true);
+                }
+            }
+        }
+    };
+
+    Ok(false)
+}
+
+/// get groups json data from "$HOMEPATH/.nvmd/groups.json"
+fn get_groups() -> Result<Option<Vec<Value>>> {
+    let mut groups_json = NVMD_PATH.clone();
+    groups_json.push("groups.json");
+    if !groups_json.exists() {
+        return Ok(None);
+    }
+
+    let json_str = read_to_string(&groups_json)?;
+    let json: Value = serde_json::from_str(&json_str)?;
+
+    Ok(json.as_array().cloned())
 }
 
 fn is_valid_version(version: &String) -> bool {
