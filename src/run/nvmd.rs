@@ -1,5 +1,6 @@
 use super::ExitStatus;
-use anyhow::{anyhow, Result};
+use super::{anyhow, Result};
+
 use chrono::Local;
 use clap::{Parser, Subcommand};
 use fs_extra::{
@@ -62,7 +63,7 @@ enum Commands {
     },
 }
 
-pub(super) fn command() -> Result<ExitStatus, String> {
+pub(super) fn command() -> Result<ExitStatus> {
     let cli = Cli::parse();
 
     let ret = match &cli.command {
@@ -87,7 +88,7 @@ pub(super) fn command() -> Result<ExitStatus, String> {
 
     match ret {
         Ok(_) => Ok(ExitStatus::from_raw(0)),
-        Err(err) => Err(err.to_string()),
+        Err(err) => Err(err),
     }
 }
 
