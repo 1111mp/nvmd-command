@@ -1,3 +1,4 @@
+use anyhow::{anyhow, Result};
 use std::{
     env::{self, ArgsOs},
     ffi::{OsStr, OsString},
@@ -12,7 +13,7 @@ mod engine;
 mod npm;
 mod nvmd;
 
-pub fn execute() -> Result<ExitStatus, String> {
+pub fn execute() -> Result<ExitStatus> {
     let mut native_args = env::args_os();
     let exe = get_tool_name(&mut native_args).expect("get tool name error");
     let args: Vec<_> = native_args.collect();

@@ -1,3 +1,4 @@
+use super::{anyhow, Result};
 use super::{ExitStatus, OsStr, OsString};
 
 use crate::{
@@ -5,7 +6,7 @@ use crate::{
     common::{ENV_PATH, INSTALLTION_PATH, VERSION},
 };
 
-pub(super) fn command(exe: &OsStr, args: &[OsString]) -> Result<ExitStatus, String> {
+pub(super) fn command(exe: &OsStr, args: &[OsString]) -> Result<ExitStatus> {
     let mut lib_path = INSTALLTION_PATH.clone();
     lib_path.push(VERSION.clone());
     if cfg!(unix) {
@@ -15,16 +16,13 @@ pub(super) fn command(exe: &OsStr, args: &[OsString]) -> Result<ExitStatus, Stri
     lib_path.push(exe);
 
     if !lib_path.exists() {
-        return Err(String::from("command not found: ") + exe.to_str().unwrap());
+        return Err(anyhow!("command not found: {:?}", exe));
     }
 
-    let child = CommandTool::create_command(exe)
+    let status = CommandTool::create_command(exe)
         .env("PATH", ENV_PATH.clone())
         .args(args)
-        .status();
+        .status()?;
 
-    match child {
-        Ok(status) => Ok(status),
-        Err(_) => Err(String::from("failed to execute process")),
-    }
+    Ok(status)
 }

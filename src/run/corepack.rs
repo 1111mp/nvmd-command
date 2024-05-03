@@ -1,3 +1,4 @@
+use super::{anyhow, Result};
 use super::{ExitStatus, OsStr, OsString};
 
 use lazy_static::lazy_static;
@@ -23,35 +24,30 @@ lazy_static! {
 // `which corepack`, but this can be tweaked by explicitly passing the install
 // directory via the `--install-directory` flag.
 
-pub(super) fn command(exe: &OsStr, args: &[OsString]) -> Result<ExitStatus, String> {
+pub(super) fn command(exe: &OsStr, args: &[OsString]) -> Result<ExitStatus> {
     if ENV_PATH.is_empty() {
-        return Err(String::from("command not found: ") + exe.to_str().unwrap());
+        return Err(anyhow!("command not found: {:?}", exe));
     }
 
-    let child = CommandTool::create_command(exe)
+    let status = CommandTool::create_command(exe)
         .env("PATH", ENV_PATH.clone())
         .args(args)
-        .status();
+        .status()?;
 
-    match child {
-        Ok(status) => {
-            let install_directory = args.contains(&INSTALL_DIRECTORY);
-            // corepack enable ..
-            // No special handling is required when using the "--install-directory" option
-            if args.contains(&ENABLE) && !install_directory {
-                corepack_enable(args);
-            }
-
-            // corepack disable ..
-            // No special handling is required when using the "--install-directory" option
-            if args.contains(&DISABLE) && !install_directory {
-                corepack_disable(args);
-            }
-
-            Ok(status)
-        }
-        Err(_) => Err(String::from("failed to execute process")),
+    let install_directory = args.contains(&INSTALL_DIRECTORY);
+    // corepack enable ..
+    // No special handling is required when using the "--install-directory" option
+    if args.contains(&ENABLE) && !install_directory {
+        corepack_enable(args);
     }
+
+    // corepack disable ..
+    // No special handling is required when using the "--install-directory" option
+    if args.contains(&DISABLE) && !install_directory {
+        corepack_disable(args);
+    }
+
+    Ok(status)
 }
 
 fn corepack_enable(args: &[OsString]) {

@@ -5,7 +5,7 @@ use lazy_static::lazy_static;
 use serde_json::{from_str, json, Value};
 #[cfg(unix)]
 use std::os::unix::fs;
-use std::{env, ffi::OsString, io::ErrorKind, path::PathBuf, process::ExitStatus};
+use std::{env, ffi::OsString, io::ErrorKind, path::PathBuf};
 
 lazy_static! {
     pub static ref NVMD_PATH: PathBuf = get_nvmd_path();
@@ -236,29 +236,4 @@ fn default_home_dir() -> Result<PathBuf, ErrorKind> {
     let mut home = dirs::home_dir().ok_or(ErrorKind::NotFound)?;
     home.push(".nvmd");
     Ok(home)
-}
-
-pub enum Error {
-    Message(String),
-    Code(i32),
-}
-
-pub trait IntoResult<T> {
-    fn into_result(self) -> Result<T, Error>;
-}
-
-impl IntoResult<()> for Result<ExitStatus, String> {
-    fn into_result(self) -> Result<(), Error> {
-        match self {
-            Ok(status) => {
-                if status.success() {
-                    Ok(())
-                } else {
-                    let code = status.code().unwrap_or(1);
-                    Err(Error::Code(code))
-                }
-            }
-            Err(err) => Err(Error::Message(err)),
-        }
-    }
 }
