@@ -1,0 +1,134 @@
+name: Alpha Build
+
+on: workflow_dispatch
+permissions: write-all
+
+env:
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: short
+
+jobs:
+  alpha:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform:
+            arch: x64
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+            arch: arm64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            arch: arm64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            arch: x64
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            arch: x64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust Stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Add Rust Target
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-all-crates: true
+
+      - name: Install toml-cli
+        run: cargo install toml-cli
+
+      - name: Get Version (Linux/MacOS)
+        if: runner.os != 'Windows'
+        run: |
+          VERSION=$(toml get Cargo.toml package.version)
+          VERSION=${VERSION//\"/}
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Get Version (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          $version = (toml get Cargo.toml package.version).Trim('"')
+          echo "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Install dependencies (ubuntu arm64 only)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Build Nvmd
+        run: |
+          cargo build --release --target ${{ matrix.target }}
+
+      - name: Rename For Windows
+        if: matrix.os == 'windows-latest'
+        run: |
+          Rename-Item '.\target\${{ matrix.target }}\release\nvmd.exe' 'nvmd_windows-${{ matrix.arch }}.exe'
+
+      - name: Rename For MacOS
+        if: matrix.os == 'macos-latest'
+        run: |
+          mv target/${{ matrix.target }}/release/nvmd nvmd_macos-${{ matrix.arch }}
+
+      - name: Rename For Linux
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          mv target/${{ matrix.target }}/release/nvmd nvmd_linux-${{ matrix.arch }}
+
+      - name: Upload Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: alpha
+          name: 'NVMD Command alpha'
+          body: 'More new features are now supported.'
+          draft: false
+          prerelease: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: |
+            target/${{ matrix.target }}/release/nvmd_windows*.exe
+            nvmd_macos-*
+            nvmd_linux-*
+
+  upload_alpha:
+    name: Upload Release
+    runs-on: ubuntu-latest
+    needs: [alpha]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust Stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install toml-cli
+        run: cargo install toml-cli
+
+      - name: Get Version
+        run: |
+          VERSION=$(toml get Cargo.toml package.version)
+          VERSION=${VERSION//\"/}
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Upload Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: alpha
+          name: 'NVMD Command alpha'
+          body: 'More new features are now supported.'
+          draft: false
+          prerelease: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: |
+            template/temp.cmd
