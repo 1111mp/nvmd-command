@@ -7,20 +7,25 @@ use crate::{
 };
 
 pub(super) fn command(exe: &OsStr, args: &[OsString]) -> Result<ExitStatus> {
-    let mut lib_path = INSTALLTION_PATH.clone();
-    lib_path.push(VERSION.clone());
-    if cfg!(unix) {
-        // unix
-        lib_path.push("bin");
-    }
-    lib_path.push(exe);
+    let lib_path = INSTALLTION_PATH.clone().and_then(|mut path| {
+        VERSION.clone().map(|version| {
+            path.push(version);
+            if cfg!(unix) {
+                path.push("bin");
+            }
+            path.push(exe);
+            path
+        })
+    });
 
-    if !lib_path.exists() {
-        return Err(anyhow!("command not found: {:?}", exe));
-    }
+    // Check if the path exists and return an error if it doesn't
+    match lib_path {
+        Some(ref path) if path.exists() => path,
+        _ => return Err(anyhow!("command not found: {:?}", exe)),
+    };
 
     let status = CommandTool::create_command(exe)
-        .env("PATH", ENV_PATH.clone())
+        .env("PATH", ENV_PATH.clone().unwrap_or_default())
         .args(args)
         .status()?;
 

@@ -38,24 +38,26 @@ const NPM_LINK_ALIASES: [&str; 2] = ["link", "ln"];
 const NPM_UPDATE_ALIASES: [&str; 4] = ["update", "udpate", "upgrade", "up"];
 
 pub(super) fn command(exe: &OsStr, args: &[OsString]) -> Result<ExitStatus> {
-    if ENV_PATH.is_empty() {
+    if ENV_PATH.is_none() {
         return Err(anyhow!("command not found: {:?}", exe));
     }
-
-    let mut lib_path = INSTALLTION_PATH.clone();
-    lib_path.push(VERSION.clone());
-    if cfg!(unix) {
-        // unix
-        lib_path.push("bin");
-    }
-    lib_path.push(exe);
-
-    if !lib_path.exists() {
-        return Err(anyhow!("command not found: {:?}", exe));
-    }
+    let lib_path = INSTALLTION_PATH.clone().and_then(|mut path| {
+        VERSION.clone().map(|version| {
+            path.push(version);
+            if cfg!(unix) {
+                path.push("bin");
+            }
+            path.push(exe);
+            path
+        })
+    });
+    // Check if the path exists and return an error if it doesn't
+    match lib_path {
+        Some(ref path) if path.exists() => path,
+        _ => return Err(anyhow!("command not found: {:?}", exe)),
+    };
 
     let mut positionals = args.iter().filter(is_positional).map(|arg| arg.as_os_str());
-
     let status = match positionals.next() {
         Some(cmd) if NPM_INSTALL_ALIASES.iter().any(|a| a == &cmd) => {
             let tools: Vec<_> = positionals.collect();
@@ -112,7 +114,7 @@ fn command_uninstall_executor(
     let status = executor(exe, args)?;
 
     if status.success() && has_global {
-        global_uninstall_packages();
+        global_uninstall_packages()?;
     }
 
     Ok(status)
@@ -132,7 +134,7 @@ fn command_unlink_executor(
     let status = executor(exe, args)?;
 
     if status.success() && has_global {
-        global_uninstall_packages();
+        global_uninstall_packages()?;
     }
 
     Ok(status)
@@ -169,7 +171,7 @@ where
     A: AsRef<OsStr>,
 {
     Ok(CommandTool::create_command(exe)
-        .env("PATH", ENV_PATH.clone())
+        .env("PATH", ENV_PATH.clone().unwrap())
         .args(args)
         .status()?)
 }
@@ -192,7 +194,7 @@ fn global_link_packages(tools: Vec<&OsStr>) -> Result<()> {
         record_installed_package(&package_bin_names)?;
 
         for name in &package_bin_names {
-            link_package(name);
+            link_package(name)?;
         }
     }
 
@@ -221,71 +223,70 @@ fn global_install_packages(tools: Vec<&OsStr>) -> Result<()> {
         record_installed_package(&package_bin_names)?;
 
         for name in &package_bin_names {
-            link_package(name);
+            link_package(name)?;
         }
     }
 
     Ok(())
 }
 
-fn global_uninstall_packages() {
+fn global_uninstall_packages() -> Result<()> {
     let names = UNINSTALL_PACKAGES_NAME.lock().unwrap();
     for name in names.iter() {
         if record_uninstall_package(name) {
             // need to remove executable file
-            unlink_package(name);
+            unlink_package(name)?;
         }
     }
+    Ok(())
 }
 
 fn record_installed_package(packages: &Vec<String>) -> Result<()> {
-    let mut packages_path = NVMD_PATH.clone();
-    packages_path.push("packages.json");
-
-    let update_packages = || -> Result<()> {
-        let mut json_obj = json!({});
-        for package in packages {
-            json_obj[package] = json!([*VERSION]);
-        }
-        let json_str = json_obj.to_string();
-        write_all(&packages_path, &json_str)?;
-        Ok(())
-    };
-
-    match read_to_string(&packages_path) {
-        Err(_) => {
-            // not exsit
-            update_packages()?;
-        }
-        Ok(content) => {
-            // exsit
-            if content.is_empty() {
+    if let Some(mut packages_path) = NVMD_PATH.clone() {
+        packages_path.push("packages.json");
+        let update_packages = || -> Result<()> {
+            let mut json_obj = json!({});
+            for package in packages {
+                json_obj[package] = json!([*VERSION]);
+            }
+            let json_str = json_obj.to_string();
+            write_all(&packages_path, &json_str)?;
+            Ok(())
+        };
+        match read_to_string(&packages_path) {
+            Err(_) => {
+                // not exsit
                 update_packages()?;
-            } else {
-                let mut json_obj: Value = from_str(&content)?;
-                for package in packages {
-                    if json_obj[package].is_null() {
-                        json_obj[package] = json!([*VERSION]);
-                    } else {
-                        if let Some(versions) = json_obj[package].as_array_mut() {
-                            let version_value = json!(*VERSION);
-                            if !versions.contains(&version_value) {
-                                versions.push(version_value);
+            }
+            Ok(content) => {
+                // exsit
+                if content.is_empty() {
+                    update_packages()?;
+                } else {
+                    let mut json_obj: Value = from_str(&content)?;
+                    for package in packages {
+                        if json_obj[package].is_null() {
+                            json_obj[package] = json!([*VERSION]);
+                        } else {
+                            if let Some(versions) = json_obj[package].as_array_mut() {
+                                let version_value = json!(*VERSION);
+                                if !versions.contains(&version_value) {
+                                    versions.push(version_value);
+                                }
                             }
                         }
                     }
+                    let json_str = json_obj.to_string();
+                    write_all(&packages_path, &json_str)?;
                 }
-                let json_str = json_obj.to_string();
-                write_all(&packages_path, &json_str)?;
             }
-        }
-    };
-
+        };
+    }
     Ok(())
 }
 
 fn record_uninstall_package(name: &String) -> bool {
-    let mut packages_path = NVMD_PATH.clone();
+    let mut packages_path = NVMD_PATH.clone().unwrap();
     packages_path.push("packages.json");
 
     match read_to_string(&packages_path) {
@@ -366,7 +367,7 @@ fn get_npm_perfix() -> String {
     let mut command = CommandTool::create_command("npm");
 
     let child = command
-        .env("PATH", ENV_PATH.clone())
+        .env("PATH", ENV_PATH.clone().unwrap())
         .args(["root", "-g"])
         .stdout(Stdio::piped())
         .spawn()

@@ -16,46 +16,48 @@ lazy_static! {
 
 // corepack enable --install-directory /path/to/folder
 
-// When run, this commmand will check whether the shims for the specified package
+// When run, this command will check whether the shims for the specified package
 // managers can be found with the correct values inside the install directory. If
 // not, or if they don't exist, they will be created.
 
-// By default it will locate the install directory by running the equivalent of
+// By default, it will locate the install directory by running the equivalent of
 // `which corepack`, but this can be tweaked by explicitly passing the install
 // directory via the `--install-directory` flag.
 
 pub(super) fn command(exe: &OsStr, args: &[OsString]) -> Result<ExitStatus> {
-    if ENV_PATH.is_empty() {
-        return Err(anyhow!("command not found: {:?}", exe));
-    }
+    let env_path = ENV_PATH
+        .clone()
+        .ok_or_else(|| anyhow!("command not found: {:?}", exe))?;
 
     let status = CommandTool::create_command(exe)
-        .env("PATH", ENV_PATH.clone())
+        .env("PATH", env_path)
         .args(args)
         .status()?;
 
-    let install_directory = args.contains(&INSTALL_DIRECTORY);
-    // corepack enable ..
-    // No special handling is required when using the "--install-directory" option
-    if args.contains(&ENABLE) && !install_directory {
-        corepack_enable(args);
+    let install_directory = args.contains(&*INSTALL_DIRECTORY);
+
+    if args.contains(&*ENABLE) && !install_directory {
+        corepack_manage(args, true)?;
     }
 
-    // corepack disable ..
-    // No special handling is required when using the "--install-directory" option
-    if args.contains(&DISABLE) && !install_directory {
-        corepack_disable(args);
+    if args.contains(&*DISABLE) && !install_directory {
+        corepack_manage(args, false)?;
     }
 
     Ok(status)
 }
 
-fn corepack_enable(args: &[OsString]) {
-    let packages = &mut args
-        .into_iter()
-        .filter(is_positional)
-        .map(|name| String::from(name.to_str().unwrap()))
-        .collect::<Vec<String>>();
+fn corepack_manage(args: &[OsString], enable: bool) -> Result<()> {
+    let mut packages: Vec<String> = args
+        .iter()
+        .filter_map(|name| {
+            if is_package_name(name) {
+                name.to_str().map(String::from)
+            } else {
+                None
+            }
+        })
+        .collect();
 
     if packages.is_empty() && !args.contains(&OsString::from("npm")) {
         packages.push(String::from("yarn"));
@@ -63,43 +65,29 @@ fn corepack_enable(args: &[OsString]) {
     }
 
     for package in packages {
-        link_package(package);
-        if package == "yarn" {
-            link_package(&String::from("yarnpkg"));
-        }
-        if package == "pnpm" {
-            link_package(&String::from("pnpx"));
-        }
-    }
-}
-
-fn corepack_disable(args: &[OsString]) {
-    let packages = &mut args
-        .into_iter()
-        .filter(is_positional)
-        .map(|name| String::from(name.to_str().unwrap()))
-        .collect::<Vec<String>>();
-
-    if packages.is_empty() && !args.contains(&OsString::from("npm")) {
-        packages.push(String::from("yarn"));
-        packages.push(String::from("pnpm"));
-    }
-
-    for package in packages {
-        if package_can_be_removed(package) {
-            // need to remove executable file
-            unlink_package(package);
+        if enable {
+            link_package(&package)?;
             if package == "yarn" {
-                unlink_package(&String::from("yarnpkg"));
+                link_package("yarnpkg")?;
             }
             if package == "pnpm" {
-                unlink_package(&String::from("pnpx"));
+                link_package("pnpx")?;
+            }
+        } else if package_can_be_removed(&package)? {
+            unlink_package(&package)?;
+            if package == "yarn" {
+                unlink_package("yarnpkg")?;
+            }
+            if package == "pnpm" {
+                unlink_package("pnpx")?;
             }
         }
     }
+
+    Ok(())
 }
 
-fn is_flag<A>(arg: &A) -> bool
+fn is_package_name<A>(arg: &A) -> bool
 where
     A: AsRef<OsStr>,
 {
@@ -107,11 +95,4 @@ where
         Some(a) => a == "yarn" || a == "pnpm",
         None => false,
     }
-}
-
-fn is_positional<A>(arg: &A) -> bool
-where
-    A: AsRef<OsStr>,
-{
-    is_flag(arg)
 }
