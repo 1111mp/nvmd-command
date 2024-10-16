@@ -321,7 +321,7 @@ fn update_projects_file(
 ) -> Result<()> {
     if let Some(mut projects_path) = NVMD_PATH.clone() {
         projects_path.push("projects.json");
-        let mut json_obj = read_json(&projects_path)?;
+        let mut json_obj = read_json(&projects_path).unwrap_or(json!([]));
         let mut not_exist = true;
         if let Some(projects) = json_obj.as_array_mut() {
             for project in projects.iter_mut() {
