@@ -1,11 +1,12 @@
-use super::{anyhow, Result};
+use super::Result;
 use super::{ExitStatus, OsStr, OsString};
 
+use anyhow::bail;
 use lazy_static::lazy_static;
 
 use crate::{
     command as CommandTool,
-    common::{link_package, package_can_be_removed, unlink_package, ENV_PATH},
+    common::{link_package, package_can_be_removed, unlink_package, ENV_PATH, VERSION},
 };
 
 lazy_static! {
@@ -25,9 +26,21 @@ lazy_static! {
 // directory via the `--install-directory` flag.
 
 pub(super) fn command(exe: &OsStr, args: &[OsString]) -> Result<ExitStatus> {
-    let env_path = ENV_PATH
-        .clone()
-        .ok_or_else(|| anyhow!("command not found: {:?}", exe))?;
+    let env_path = match ENV_PATH.as_ref() {
+        Some(env_path) => env_path,
+        None => {
+            if VERSION.is_none() {
+                bail!("the default node version is not set, you can set it by executing \"nvmd use {{version}}\"");
+            }
+            if let Some(version) = VERSION.as_ref() {
+                bail!(
+                    "version v{} is not installed, please install it before using",
+                    version
+                );
+            }
+            bail!("command not found: {:?}", exe);
+        }
+    };
 
     let status = CommandTool::create_command(exe)
         .env("PATH", env_path)
