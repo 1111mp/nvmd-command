@@ -49,7 +49,7 @@ jobs:
           cache-all-crates: true
 
       - name: Install cross
-        run: cargo install cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
 
       - name: Build Nvmd
         run: |
