@@ -1,12 +1,11 @@
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 #[cfg(windows)]
 use fs_extra::file::{copy, CopyOptions};
 use fs_extra::file::{read_to_string, remove};
 use lazy_static::lazy_static;
-use serde_json::{from_str, json, Value};
-#[cfg(unix)]
-use std::os::unix::fs;
-use std::{env, ffi::OsString, path::PathBuf};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde_json::{from_str, Value};
+use std::{collections::HashMap, env, ffi::OsString, fs, path::PathBuf};
 
 lazy_static! {
     pub static ref NVMD_PATH: Option<PathBuf> = get_nvmd_path().ok();
@@ -110,31 +109,67 @@ fn get_nvmd_path() -> Result<PathBuf> {
 pub fn package_can_be_removed(name: &String) -> Result<bool> {
     if let Some(mut packages_path) = NVMD_PATH.clone() {
         packages_path.push("packages.json");
-        let content = read_to_string(&packages_path)?;
-        if content.is_empty() {
+        let packages = read_json::<Packages>(&packages_path)?;
+        if packages.is_empty() {
             return Ok(true);
         }
-        let json_obj: Value = from_str(&content).unwrap();
-        if json_obj.is_null() || !json_obj.is_object() {
-            return Ok(true);
+        if let Some(package) = packages.get(name) {
+            if package.is_empty() {
+                return Ok(true);
+            }
+
+            if package.len() == 1 && package.contains(&VERSION.clone().unwrap()) {
+                return Ok(true);
+            }
         }
-        if json_obj[name].is_null() || !json_obj[name].is_array() {
-            return Ok(true);
-        }
-        let versions = json_obj[name].as_array().unwrap();
-        if versions.is_empty() {
-            return Ok(true);
-        }
-        let target = json!(*VERSION);
-        if versions.len() == 1 && versions.contains(&target) {
-            return Ok(true);
-        }
+        return Ok(true);
     }
     Ok(true)
 }
 
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Project {
+    /// is it active
+    pub active: bool,
+
+    /// project name
+    pub name: String,
+
+    /// project path
+    pub path: String,
+
+    /// the node version of project used
+    pub version: Option<String>,
+
+    /// create date
+    pub create_at: Option<String>,
+
+    /// update date
+    pub update_at: Option<String>,
+}
+
+pub type Packages = HashMap<String, Vec<String>>;
+
+pub fn read_json<T: DeserializeOwned>(path: &PathBuf) -> Result<T> {
+    if !path.exists() {
+        bail!("file not found \"{}\"", path.display());
+    }
+
+    let json_str = fs::read_to_string(path)
+        .with_context(|| format!("failed to read the file \"{}\"", path.display()))?;
+
+    serde_json::from_str::<T>(&json_str).with_context(|| {
+        format!(
+            "failed to read the file with json format \"{}\"",
+            path.display()
+        )
+    })
+}
+
 #[cfg(unix)]
 pub fn link_package(name: &str) -> Result<()> {
+    use std::os::unix::fs;
     if let Some(path) = NVMD_PATH.clone() {
         let mut source = path.clone();
         source.push("bin");
