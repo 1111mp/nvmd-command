@@ -1,22 +1,25 @@
 use super::{anyhow, Result};
 use super::{ExitStatus, OsStr, OsString};
 
+use crate::utils::help::link_package;
+use crate::utils::package::{
+    collect_package_bin_names, collect_package_bin_names_for_link,
+    collect_package_bin_names_from_curdir, record_installed_package_info,
+    record_uninstall_package_info,
+};
+use crate::{
+    command as CommandTool,
+    common::{ENV_PATH, INSTALLTION_PATH, VERSION},
+};
+
 use anyhow::bail;
-use fs_extra::file::{read_to_string, write_all};
 use lazy_static::lazy_static;
 use regex::Regex;
-use serde_json::{from_str, json, Value};
 use std::{
-    env,
     io::{BufRead, BufReader},
     path::PathBuf,
     process::Stdio,
     sync::Mutex,
-};
-
-use crate::{
-    command as CommandTool,
-    common::{link_package, unlink_package, ENV_PATH, INSTALLTION_PATH, NVMD_PATH, VERSION},
 };
 
 lazy_static! {
@@ -105,11 +108,9 @@ fn command_install_executor(
     tools: Vec<&OsStr>,
 ) -> Result<ExitStatus> {
     let status = executor(exe, args)?;
-
     if status.success() && command_has_global(args) {
         global_install_packages(tools)?;
     }
-
     Ok(status)
 }
 
@@ -121,15 +122,13 @@ fn command_uninstall_executor(
 ) -> Result<ExitStatus> {
     let has_global = command_has_global(args);
     if has_global {
-        collection_packages_name(tools)?;
+        collect_packages_names_before_uninstall(tools)?;
     }
 
     let status = executor(exe, args)?;
-
     if status.success() && has_global {
         global_uninstall_packages()?;
     }
-
     Ok(status)
 }
 
@@ -179,33 +178,10 @@ fn command_update_executor(
     Ok(status)
 }
 
-fn executor<A>(exe: &OsStr, args: &[A]) -> Result<ExitStatus>
-where
-    A: AsRef<OsStr>,
-{
-    Ok(CommandTool::create_command(exe)
-        .env("PATH", ENV_PATH.clone().unwrap())
-        .args(args)
-        .status()?)
-}
-
-fn command_has_global<A>(args: &[A]) -> bool
-where
-    A: AsRef<OsStr>,
-{
-    args.iter()
-        .fold(false, |global, arg| match arg.as_ref().to_str() {
-            Some("-g") | Some("--global") => true,
-            _ => global,
-        })
-}
-
 fn global_link_packages(tools: Vec<&OsStr>) -> Result<()> {
     let package_bin_names = get_package_bin_names_for_link(tools)?;
-
     if !package_bin_names.is_empty() {
-        record_installed_package(&package_bin_names)?;
-
+        record_installed_package_info(&package_bin_names)?;
         for name in &package_bin_names {
             link_package(name)?;
         }
@@ -230,11 +206,9 @@ fn global_install_packages(tools: Vec<&OsStr>) -> Result<()> {
         .collect();
 
     let npm_perfix = get_npm_perfix();
-    let package_bin_names = get_package_bin_names(&npm_perfix, packages)?;
-
+    let package_bin_names = collect_package_bin_names(&npm_perfix, packages)?;
     if !package_bin_names.is_empty() {
-        record_installed_package(&package_bin_names)?;
-
+        record_installed_package_info(&package_bin_names)?;
         for name in &package_bin_names {
             link_package(name)?;
         }
@@ -245,112 +219,14 @@ fn global_install_packages(tools: Vec<&OsStr>) -> Result<()> {
 
 fn global_uninstall_packages() -> Result<()> {
     let names = UNINSTALL_PACKAGES_NAME.lock().unwrap();
-    for name in names.iter() {
-        if record_uninstall_package(name) {
-            // need to remove executable file
-            unlink_package(name)?;
-        }
-    }
+    record_uninstall_package_info(&names)?;
     Ok(())
-}
-
-fn record_installed_package(packages: &Vec<String>) -> Result<()> {
-    if let Some(mut packages_path) = NVMD_PATH.clone() {
-        packages_path.push("packages.json");
-        let update_packages = || -> Result<()> {
-            let mut json_obj = json!({});
-            for package in packages {
-                json_obj[package] = json!([*VERSION]);
-            }
-            let json_str = json_obj.to_string();
-            write_all(&packages_path, &json_str)?;
-            Ok(())
-        };
-        match read_to_string(&packages_path) {
-            Err(_) => {
-                // not exsit
-                update_packages()?;
-            }
-            Ok(content) => {
-                // exsit
-                if content.is_empty() {
-                    update_packages()?;
-                } else {
-                    let mut json_obj: Value = from_str(&content)?;
-                    for package in packages {
-                        if json_obj[package].is_null() {
-                            json_obj[package] = json!([*VERSION]);
-                        } else {
-                            if let Some(versions) = json_obj[package].as_array_mut() {
-                                let version_value = json!(*VERSION);
-                                if !versions.contains(&version_value) {
-                                    versions.push(version_value);
-                                }
-                            }
-                        }
-                    }
-                    let json_str = json_obj.to_string();
-                    write_all(&packages_path, &json_str)?;
-                }
-            }
-        };
-    }
-    Ok(())
-}
-
-fn record_uninstall_package(name: &String) -> bool {
-    let mut packages_path = NVMD_PATH.clone().unwrap();
-    packages_path.push("packages.json");
-
-    match read_to_string(&packages_path) {
-        Err(_) => true,
-        Ok(content) => {
-            if content.is_empty() {
-                return true;
-            }
-
-            let mut json_obj: Value = from_str(&content).unwrap();
-
-            if json_obj.is_null() || !json_obj.is_object() {
-                return true;
-            }
-
-            if json_obj[name].is_null() || !json_obj[name].is_array() {
-                return true;
-            }
-
-            let versions = json_obj[name].as_array_mut().unwrap();
-
-            if versions.is_empty() {
-                return true;
-            }
-
-            let target = json!(*VERSION);
-
-            if !versions.contains(&target) {
-                return false;
-            }
-
-            versions.retain(|x| x.as_str().unwrap() != target.as_str().unwrap());
-
-            let mut ret: bool = false;
-            if versions.is_empty() {
-                ret = true;
-            }
-
-            let json_str = json_obj.to_string();
-            write_all(packages_path, &json_str).unwrap();
-
-            return ret;
-        }
-    }
 }
 
 /// For unlink, should to find the current project name when without package argument.
 fn collection_packages_name_for_unlink(tools: Vec<&OsStr>) -> Result<()> {
     let npm_perfix = get_npm_perfix();
     let package_bin_names = get_package_bin_names_for_unlink(tools, &npm_perfix)?;
-
     if !package_bin_names.is_empty() {
         let mut global_names = UNINSTALL_PACKAGES_NAME.lock().unwrap();
         for name in package_bin_names {
@@ -361,11 +237,10 @@ fn collection_packages_name_for_unlink(tools: Vec<&OsStr>) -> Result<()> {
     Ok(())
 }
 
-fn collection_packages_name(tools: Vec<&OsStr>) -> Result<()> {
+/// collect the bin name of the package before uninstalling it globally
+fn collect_packages_names_before_uninstall(tools: Vec<&OsStr>) -> Result<()> {
     let npm_perfix = get_npm_perfix();
-
-    let package_bin_names = get_package_bin_names(&npm_perfix, &tools)?;
-
+    let package_bin_names = collect_package_bin_names(&npm_perfix, &tools)?;
     if !package_bin_names.is_empty() {
         let mut global_names = UNINSTALL_PACKAGES_NAME.lock().unwrap();
         for name in package_bin_names {
@@ -404,10 +279,9 @@ fn get_package_bin_names_for_unlink(
     npm_perfix: &String,
 ) -> Result<Vec<String>> {
     if tools.is_empty() {
-        return Ok(get_package_bin_names_from_curdir()?);
+        return collect_package_bin_names_from_curdir();
     }
-
-    get_package_bin_names(npm_perfix, &tools)
+    collect_package_bin_names(npm_perfix, &tools)
 }
 
 /// The link command supports execution from the current package directory without parameters.
@@ -415,7 +289,7 @@ fn get_package_bin_names_for_unlink(
 /// Finally, the package name is passed in directly, similar to the "install" command.
 fn get_package_bin_names_for_link(tools: Vec<&OsStr>) -> Result<Vec<String>> {
     if tools.is_empty() {
-        return Ok(get_package_bin_names_from_curdir()?);
+        return collect_package_bin_names_from_curdir();
     }
 
     let re_str = "@[0-9]|@latest|@\"|@npm:";
@@ -436,122 +310,28 @@ fn get_package_bin_names_for_link(tools: Vec<&OsStr>) -> Result<Vec<String>> {
         })
         .collect();
 
-    bin_names_for_link(&npm_perfix, &packages)
+    collect_package_bin_names_for_link(&npm_perfix, &packages)
 }
 
-fn bin_names_for_link(npm_perfix: &String, packages: &Vec<&OsStr>) -> Result<Vec<String>> {
-    let mut package_bin_names: Vec<String> = vec![];
-    for package in packages {
-        let mut package_json = if PathBuf::from(package).is_relative() {
-            let mut cur_dir = env::current_dir()?;
-            cur_dir.push(package);
-            cur_dir.canonicalize()?
-        } else {
-            let mut path = PathBuf::from(npm_perfix);
-            path.push(package);
-            path
-        };
-        package_json.push("package.json");
-
-        let json_str = read_to_string(&package_json)?;
-
-        if json_str.is_empty() {
-            continue;
-        }
-
-        let json: Value = serde_json::from_str(&json_str)?;
-        let bin = &json["bin"];
-
-        if bin.is_null() {
-            continue;
-        }
-
-        if bin.is_string() {
-            if let Some(name) = json["name"].as_str() {
-                package_bin_names.push(name.to_owned());
-            }
-        } else {
-            if let Some(keys) = json["bin"].as_object() {
-                for (key, _val) in keys {
-                    package_bin_names.push(key.to_string());
-                }
-            }
-        }
-    }
-
-    Ok(package_bin_names)
+fn executor<A>(exe: &OsStr, args: &[A]) -> Result<ExitStatus>
+where
+    A: AsRef<OsStr>,
+{
+    Ok(CommandTool::create_command(exe)
+        .env("PATH", ENV_PATH.clone().unwrap())
+        .args(args)
+        .status()?)
 }
 
-/// find package bin namesc from current dir for npm link/unlink command
-fn get_package_bin_names_from_curdir() -> Result<Vec<String>> {
-    let mut package_bin_names: Vec<String> = vec![];
-
-    let mut package_json = env::current_dir()?;
-    package_json.push("package.json");
-
-    let json_str = read_to_string(&package_json)?;
-
-    if json_str.is_empty() {
-        return Ok(package_bin_names);
-    }
-
-    let json: Value = serde_json::from_str(&json_str)?;
-    let bin = &json["bin"];
-
-    if bin.is_null() {
-        return Ok(package_bin_names);
-    }
-
-    if bin.is_string() {
-        if let Some(name) = json["name"].as_str() {
-            package_bin_names.push(name.to_owned());
-        }
-    } else {
-        if let Some(bin) = json["bin"].as_object() {
-            for (key, _val) in bin {
-                package_bin_names.push(key.to_string());
-            }
-        }
-    }
-
-    Ok(package_bin_names)
-}
-
-fn get_package_bin_names(npm_perfix: &String, packages: &Vec<&OsStr>) -> Result<Vec<String>> {
-    let mut package_bin_names: Vec<String> = vec![];
-
-    for package in packages {
-        let mut package_json = PathBuf::from(npm_perfix);
-        package_json.push(package);
-        package_json.push("package.json");
-
-        let json_str = read_to_string(&package_json)?;
-
-        if json_str.is_empty() {
-            continue;
-        }
-
-        let json: Value = serde_json::from_str(&json_str)?;
-        let bin = &json["bin"];
-
-        if bin.is_null() {
-            continue;
-        }
-
-        if bin.is_string() {
-            if let Some(name) = json["name"].as_str() {
-                package_bin_names.push(name.to_owned());
-            }
-        } else {
-            if let Some(bin) = json["bin"].as_object() {
-                for (key, _val) in bin {
-                    package_bin_names.push(key.to_string());
-                }
-            }
-        }
-    }
-
-    Ok(package_bin_names)
+fn command_has_global<A>(args: &[A]) -> bool
+where
+    A: AsRef<OsStr>,
+{
+    args.iter()
+        .fold(false, |global, arg| match arg.as_ref().to_str() {
+            Some("-g") | Some("--global") => true,
+            _ => global,
+        })
 }
 
 fn is_flag<A>(arg: &A) -> bool

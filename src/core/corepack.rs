@@ -1,13 +1,15 @@
 use super::Result;
 use super::{ExitStatus, OsStr, OsString};
 
-use anyhow::bail;
-use lazy_static::lazy_static;
-
+use crate::utils::help::{link_package, unlink_package};
+use crate::utils::package::package_can_be_removed;
 use crate::{
     command as CommandTool,
-    common::{link_package, package_can_be_removed, unlink_package, ENV_PATH, VERSION},
+    common::{ENV_PATH, VERSION},
 };
+
+use anyhow::bail;
+use lazy_static::lazy_static;
 
 lazy_static! {
     static ref ENABLE: OsString = OsString::from("enable");

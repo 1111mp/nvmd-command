@@ -2,9 +2,10 @@ use std::process;
 
 mod command;
 mod common;
-mod run;
+mod core;
+mod utils;
 
-use run::execute;
+use core::execute;
 
 fn main() {
     let result = execute();
