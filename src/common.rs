@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use fs_extra::file::read_to_string;
+use fs_extra::{error::Error, file::read_to_string};
 use lazy_static::lazy_static;
 use serde_json::{from_str, Value};
 use std::{env, ffi::OsString, path::PathBuf};
@@ -40,7 +40,8 @@ fn get_bin_path(version: &str) -> Option<OsString> {
 fn get_installation_path() -> Result<Option<PathBuf>> {
     if let Some(mut setting_path) = NVMD_PATH.clone() {
         setting_path.push("setting.json");
-        let setting_content = read_to_string(&setting_path)?;
+
+        let setting_content = read_to_string(&setting_path).or::<Error>(Ok("".to_string()))?;
         if setting_content.is_empty() {
             return Ok(DEFAULT_INSTALLATION_PATH.clone());
         }
