@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use fs_extra::{error::Error, file::read_to_string};
+use fs_extra::file::read_to_string;
 use lazy_static::lazy_static;
 use serde_json::{from_str, Value};
 use std::{env, ffi::OsString, path::PathBuf};
