@@ -40,7 +40,8 @@ fn get_bin_path(version: &str) -> Option<OsString> {
 fn get_installation_path() -> Result<Option<PathBuf>> {
     if let Some(mut setting_path) = NVMD_PATH.clone() {
         setting_path.push("setting.json");
-        let setting_content = read_to_string(&setting_path)?;
+
+        let setting_content = read_to_string(&setting_path).unwrap_or("".to_string());
         if setting_content.is_empty() {
             return Ok(DEFAULT_INSTALLATION_PATH.clone());
         }
