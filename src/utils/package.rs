@@ -3,19 +3,19 @@ use super::help::{read_json, unlink_package, write_json};
 use crate::common::{NVMD_PATH, VERSION};
 
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::{collections::HashMap, env, ffi::OsStr, path::PathBuf, sync::MutexGuard};
 
 pub type Packages = HashMap<String, Vec<String>>;
 
-#[derive(Debug, Default, Clone, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, Deserialize)]
 pub struct PackageJson {
     pub name: Option<String>,
     pub bin: Option<Bin>,
 }
 
 /// https://docs.npmjs.com/cli/v10/configuring-npm/package-json#bin
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
 pub enum Bin {
     Single(String),

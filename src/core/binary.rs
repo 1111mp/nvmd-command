@@ -3,11 +3,11 @@ use super::{ExitStatus, OsStr, OsString};
 
 use crate::{
     command as CommandTool,
-    common::{ENV_PATH, INSTALLTION_PATH, VERSION},
+    common::{ENV_PATH, INSTALLTION_DIRECTORY, VERSION},
 };
 
 pub(super) fn command(exe: &OsStr, args: &[OsString]) -> Result<ExitStatus> {
-    let lib_path = INSTALLTION_PATH.clone().and_then(|mut path| {
+    let lib_path = INSTALLTION_DIRECTORY.clone().and_then(|mut path| {
         VERSION.clone().map(|version| {
             path.push(version);
             if cfg!(unix) {

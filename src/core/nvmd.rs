@@ -1,7 +1,7 @@
 use super::ExitStatus;
 use super::{anyhow, Result};
 
-use crate::common::{INSTALLTION_PATH, NVMD_PATH, VERSION};
+use crate::common::{INSTALLTION_DIRECTORY, NVMD_PATH, VERSION};
 use crate::utils::group::{
     find_group_by_name, get_groups, is_group_name, update_group_info_by_name,
 };
@@ -119,7 +119,7 @@ fn command_for_list_group() -> Result<()> {
 
 /// nvmd list or nvmd ls
 fn command_for_list() -> Result<()> {
-    if let Some(install_path) = INSTALLTION_PATH.clone() {
+    if let Some(install_path) = INSTALLTION_DIRECTORY.clone() {
         let mut config = HashSet::new();
         config.insert(DirEntryAttr::Name);
         let ls_result = ls(&install_path, &config)?;
@@ -214,7 +214,7 @@ fn command_for_use_project(input: &String) -> Result<()> {
 /// nvmd which {version}
 fn command_for_which(ver: &String) -> Result<()> {
     let version = sanitize_version(ver);
-    if let Some(mut version_path) = INSTALLTION_PATH.clone() {
+    if let Some(mut version_path) = INSTALLTION_DIRECTORY.clone() {
         version_path.push(&version);
         if cfg!(unix) {
             version_path.push("bin");

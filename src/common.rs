@@ -1,14 +1,15 @@
 use anyhow::{Context, Result};
 use fs_extra::file::read_to_string;
 use lazy_static::lazy_static;
-use serde_json::{from_str, Value};
 use std::{env, ffi::OsString, path::PathBuf};
+
+use crate::utils::setting::get_directory;
 
 lazy_static! {
     pub static ref NVMD_PATH: Option<PathBuf> = get_nvmd_path().ok();
     pub static ref VERSION: Option<String> = get_version().unwrap_or(None);
-    pub static ref DEFAULT_INSTALLATION_PATH: Option<PathBuf> = get_default_installation_path();
-    pub static ref INSTALLTION_PATH: Option<PathBuf> = get_installation_path().unwrap_or(None);
+    pub static ref INSTALLTION_DIRECTORY: Option<PathBuf> =
+        get_installation_directory().unwrap_or(None);
     pub static ref ENV_PATH: Option<OsString> = get_env_path();
 }
 
@@ -28,7 +29,7 @@ fn get_env_path() -> Option<OsString> {
 }
 
 fn get_bin_path(version: &str) -> Option<OsString> {
-    INSTALLTION_PATH.clone().map(|mut nvmd_path| {
+    INSTALLTION_DIRECTORY.clone().map(|mut nvmd_path| {
         nvmd_path.push(version);
         if cfg!(unix) {
             nvmd_path.push("bin");
@@ -37,31 +38,21 @@ fn get_bin_path(version: &str) -> Option<OsString> {
     })
 }
 
-fn get_installation_path() -> Result<Option<PathBuf>> {
-    if let Some(mut setting_path) = NVMD_PATH.clone() {
+fn get_installation_directory() -> Result<Option<PathBuf>> {
+    if let Some(nvmd_path) = NVMD_PATH.clone() {
+        let mut setting_path = nvmd_path.clone();
         setting_path.push("setting.json");
-
-        let setting_content = read_to_string(&setting_path).unwrap_or("".to_string());
-        if setting_content.is_empty() {
-            return Ok(DEFAULT_INSTALLATION_PATH.clone());
+        let directory = get_directory(&setting_path);
+        if directory.is_some() {
+            return Ok(directory);
         }
 
-        let json_obj: Value = from_str(&setting_content)?;
-        if let Some(directory) = json_obj["directory"].as_str() {
-            return Ok(Some(PathBuf::from(directory)));
-        } else {
-            return Ok(DEFAULT_INSTALLATION_PATH.clone());
-        }
+        let mut default_directory = nvmd_path;
+        default_directory.push("versions");
+        return Ok(Some(default_directory));
     }
 
     Ok(None)
-}
-
-fn get_default_installation_path() -> Option<PathBuf> {
-    NVMD_PATH.clone().map(|mut default_path| {
-        default_path.push("versions");
-        default_path
-    })
 }
 
 fn get_version() -> Result<Option<String>> {
@@ -84,14 +75,17 @@ fn get_version() -> Result<Option<String>> {
 }
 
 fn find_nvmdrc() -> Result<Option<PathBuf>> {
+    let nvmdrc_file = ".nvmdrc";
     let mut current_dir = env::current_dir()?;
-    current_dir.push(".nvmdrc");
 
-    while current_dir.pop() {
-        let mut nvmdrc = current_dir.clone();
-        nvmdrc.push(".nvmdrc");
-        if nvmdrc.is_file() {
-            return Ok(Some(nvmdrc));
+    loop {
+        let potential_nvmdrc = current_dir.join(nvmdrc_file);
+        if potential_nvmdrc.is_file() {
+            return Ok(Some(potential_nvmdrc));
+        }
+
+        if !current_dir.pop() {
+            break;
         }
     }
 

@@ -9,7 +9,7 @@ use crate::utils::package::{
 };
 use crate::{
     command as CommandTool,
-    common::{ENV_PATH, INSTALLTION_PATH, VERSION},
+    common::{ENV_PATH, INSTALLTION_DIRECTORY, VERSION},
 };
 
 use anyhow::bail;
@@ -57,7 +57,7 @@ pub(super) fn command(exe: &OsStr, args: &[OsString]) -> Result<ExitStatus> {
             bail!("command not found: {:?}", exe);
         }
     };
-    let lib_path = INSTALLTION_PATH.clone().and_then(|mut path| {
+    let lib_path = INSTALLTION_DIRECTORY.clone().and_then(|mut path| {
         VERSION.clone().map(|version| {
             path.push(version);
             if cfg!(unix) {

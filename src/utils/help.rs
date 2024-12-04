@@ -5,7 +5,7 @@ use anyhow::{bail, Context, Result};
 use fs_extra::file::{remove, write_all};
 use serde::de::DeserializeOwned;
 
-use crate::common::INSTALLTION_PATH;
+use crate::common::INSTALLTION_DIRECTORY;
 
 pub fn read_json<T: DeserializeOwned>(path: &PathBuf) -> Result<T> {
     if !path.exists() {
@@ -30,7 +30,7 @@ pub fn write_json<T: serde::Serialize>(path: &PathBuf, data: &T) -> Result<()> {
 }
 
 pub fn is_valid_version(version: &String) -> bool {
-    if let Some(mut version_path) = INSTALLTION_PATH.clone() {
+    if let Some(mut version_path) = INSTALLTION_DIRECTORY.clone() {
         version_path.push(&version);
         if cfg!(windows) {
             version_path.push("node.exe");
