@@ -1,13 +1,16 @@
-use std::process;
-
 mod command;
 mod common;
 mod core;
+mod signal;
 mod utils;
 
 use core::execute;
+use signal::setup_signal_handler;
+use std::process;
 
 fn main() {
+    setup_signal_handler();
+
     let result = execute();
     match result {
         Ok(exit_status) => {

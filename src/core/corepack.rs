@@ -1,6 +1,7 @@
 use super::Result;
 use super::{ExitStatus, OsStr, OsString};
 
+use crate::signal::pass_control_to_shim;
 use crate::utils::help::{link_package, unlink_package};
 use crate::utils::package::package_can_be_removed;
 use crate::{
@@ -44,13 +45,14 @@ pub(super) fn command(exe: &OsStr, args: &[OsString]) -> Result<ExitStatus> {
         }
     };
 
-    let status = CommandTool::create_command(exe)
-        .env("PATH", env_path)
-        .args(args)
-        .status()?;
+    let mut command = CommandTool::create_command(exe);
+    command.env("PATH", env_path).args(args);
+
+    pass_control_to_shim();
+
+    let status = command.status()?;
 
     let install_directory = args.contains(&*INSTALL_DIRECTORY);
-
     if args.contains(&*ENABLE) && !install_directory {
         corepack_manage(args, true)?;
     }

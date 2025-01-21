@@ -1,6 +1,7 @@
 use super::{anyhow, Result};
 use super::{ExitStatus, OsStr, OsString};
 
+use crate::signal::pass_control_to_shim;
 use crate::utils::help::link_package;
 use crate::utils::package::{
     collect_package_bin_names, collect_package_bin_names_for_link,
@@ -317,10 +318,13 @@ fn executor<A>(exe: &OsStr, args: &[A]) -> Result<ExitStatus>
 where
     A: AsRef<OsStr>,
 {
-    Ok(CommandTool::create_command(exe)
-        .env("PATH", ENV_PATH.clone().unwrap())
-        .args(args)
-        .status()?)
+    let mut command = CommandTool::create_command(exe);
+    command.env("PATH", ENV_PATH.clone().unwrap()).args(args);
+
+    pass_control_to_shim();
+
+    let status = command.status()?;
+    Ok(status)
 }
 
 fn command_has_global<A>(args: &[A]) -> bool

@@ -3,6 +3,7 @@ use anyhow::bail;
 use super::Result;
 use super::{ExitStatus, OsStr, OsString};
 
+use crate::signal::pass_control_to_shim;
 use crate::{
     command as CommandTool,
     common::{ENV_PATH, VERSION},
@@ -25,10 +26,11 @@ pub(super) fn command(exe: &OsStr, args: &[OsString]) -> Result<ExitStatus> {
         }
     };
 
-    let status = CommandTool::create_command(exe)
-        .env("PATH", path)
-        .args(args)
-        .status()?;
+    let mut command = CommandTool::create_command(exe);
+    command.env("PATH", path).args(args);
 
+    pass_control_to_shim();
+
+    let status = command.status()?;
     Ok(status)
 }
