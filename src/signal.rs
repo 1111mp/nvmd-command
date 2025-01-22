@@ -16,6 +16,6 @@ pub fn setup_signal_handler() {
     });
 
     if result.is_err() {
-        println!("Unable to set Ctrl+C handler, SIGINT will not be handled correctly");
+        eprintln!("Unable to set Ctrl+C handler, SIGINT will not be handled correctly");
     }
 }
