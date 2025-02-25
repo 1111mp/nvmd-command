@@ -117,23 +117,28 @@ pub fn collect_package_bin_names_for_link(
 ) -> Result<Vec<String>> {
     let mut package_bin_names: Vec<String> = vec![];
     for package in packages {
-        let mut package_path = if PathBuf::from(package).is_relative() {
+        let package_path = if PathBuf::from(package).is_relative() {
             let mut cur_dir = env::current_dir()?;
             cur_dir.push(package);
-            cur_dir.canonicalize()?
+            match cur_dir.canonicalize() {
+                Ok(path) => Some(path),
+                Err(_) => None,
+            }
         } else {
             let mut path = PathBuf::from(npm_perfix);
             path.push(package);
-            path
+            Some(path)
         };
-        package_path.push("package.json");
-        if let Some(package_json) = read_json::<PackageJson>(&package_path).ok() {
-            match package_json.bin {
-                Some(Bin::Single(_bin)) => {
-                    package_bin_names.push(package_json.name.unwrap_or_default())
+        if let Some(mut package_path) = package_path {
+            package_path.push("package.json");
+            if let Some(package_json) = read_json::<PackageJson>(&package_path).ok() {
+                match package_json.bin {
+                    Some(Bin::Single(_bin)) => {
+                        package_bin_names.push(package_json.name.unwrap_or_default())
+                    }
+                    Some(Bin::Multiple(bin)) => package_bin_names.extend(bin.keys().cloned()),
+                    None => {}
                 }
-                Some(Bin::Multiple(bin)) => package_bin_names.extend(bin.keys().cloned()),
-                None => {}
             }
         }
     }
