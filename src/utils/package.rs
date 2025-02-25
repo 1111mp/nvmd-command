@@ -111,24 +111,13 @@ pub fn collect_package_bin_names(
     Ok(package_bin_names)
 }
 
-pub fn collect_package_bin_names_for_link(
-    npm_perfix: &String,
-    packages: &Vec<&OsStr>,
-) -> Result<Vec<String>> {
+pub fn collect_package_bin_names_for_link(packages: &Vec<&OsStr>) -> Result<Vec<String>> {
     let mut package_bin_names: Vec<String> = vec![];
     for package in packages {
-        let package_path = if PathBuf::from(package).is_relative() {
-            let mut cur_dir = env::current_dir()?;
-            cur_dir.push(package);
-            match cur_dir.canonicalize() {
-                Ok(path) => Some(path),
-                Err(_) => None,
-            }
-        } else {
-            let mut path = PathBuf::from(npm_perfix);
-            path.push(package);
-            Some(path)
-        };
+        let mut package_path = env::current_dir()?;
+        package_path.push(package);
+        let package_path = package_path.canonicalize().ok();
+
         if let Some(mut package_path) = package_path {
             package_path.push("package.json");
             if let Some(package_json) = read_json::<PackageJson>(&package_path).ok() {

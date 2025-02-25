@@ -16,6 +16,7 @@ use crate::{
 use anyhow::bail;
 use lazy_static::lazy_static;
 use regex::Regex;
+use std::path::Path;
 use std::{
     io::{BufRead, BufReader},
     path::PathBuf,
@@ -28,6 +29,7 @@ lazy_static! {
         let m = Vec::new();
         Mutex::new(m)
     };
+    static ref SKIP_NEXT: Mutex<bool> = Mutex::new(false);
 }
 
 /// Aliases that npm supports for the 'install' command
@@ -288,30 +290,26 @@ fn get_package_bin_names_for_unlink(
 /// The link command supports execution from the current package directory without parameters.
 /// It also supports execution using the relative directory of the package as a parameter.
 /// Finally, the package name is passed in directly, similar to the "install" command.
+/// https://docs.npmjs.com/cli/v9/commands/npm-link#description
 fn get_package_bin_names_for_link(tools: Vec<&OsStr>) -> Result<Vec<String>> {
+    // 'npm link'
     if tools.is_empty() {
         return collect_package_bin_names_from_curdir();
     }
 
-    let re_str = "@[0-9]|@latest|@\"|@npm:";
-    let re: Regex = Regex::new(re_str).unwrap();
-    let npm_perfix = get_npm_perfix();
-    let packages = &tools
+    // 'npm link package' or 'npm link ../package'
+    // We only need to deal with 'npm link ../package'
+    let packages: Vec<&OsStr> = tools
         .iter()
-        .map(|name| {
-            if PathBuf::from(name).is_relative() {
-                return *name;
-            }
-
-            let package = name.to_str().unwrap();
-            match re.find(&package) {
-                None => OsStr::new(package),
-                Some(mat) => OsStr::new(&package[0..(mat.start())]),
-            }
-        })
+        .filter(is_relative_path)
+        .map(|&path| path)
         .collect();
 
-    collect_package_bin_names_for_link(&npm_perfix, &packages)
+    if packages.is_empty() {
+        return Ok(vec![]);
+    }
+
+    collect_package_bin_names_for_link(&packages)
 }
 
 fn executor<A>(exe: &OsStr, args: &[A]) -> Result<ExitStatus>
@@ -338,6 +336,18 @@ where
         })
 }
 
+fn is_relative_path<A>(arg: &A) -> bool
+where
+    A: AsRef<OsStr>,
+{
+    if let Some(arg_str) = arg.as_ref().to_str() {
+        let path = Path::new(arg_str);
+        path.is_relative() && (path.starts_with(".") || path.starts_with(".."))
+    } else {
+        false
+    }
+}
+
 fn is_flag<A>(arg: &A) -> bool
 where
     A: AsRef<OsStr>,
@@ -348,9 +358,27 @@ where
     }
 }
 
+/// https://docs.npmjs.com/cli/v7/commands/npm-install#workspace
+/// https://docs.npmjs.com/cli/v7/commands/npm-link#workspace
+/// We should filter out the arguments passed via '--workspace <name>'
+/// It is a feature introduced in 'npm v7'
 fn is_positional<A>(arg: &A) -> bool
 where
     A: AsRef<OsStr>,
 {
+    let mut skip_next = SKIP_NEXT.lock().unwrap();
+
+    if *skip_next {
+        *skip_next = false;
+        return false;
+    }
+
+    if let Some(arg_str) = arg.as_ref().to_str() {
+        if arg_str == "--workspace" {
+            *skip_next = true;
+            return false;
+        }
+    }
+
     !is_flag(arg)
 }
