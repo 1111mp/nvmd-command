@@ -262,7 +262,7 @@ dependencies = [
 
 [[package]]
 name = "nvmd"
-version = "4.0.7"
+version = "4.0.8"
 dependencies = [
  "anyhow",
  "cfg-if",
