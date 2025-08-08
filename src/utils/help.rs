@@ -44,6 +44,13 @@ pub fn is_valid_version(version: &String) -> bool {
     false
 }
 
+pub fn node_available(version: &String) -> bool {
+    INSTALLTION_DIRECTORY
+        .clone()
+        .map(|dir| dir.join(version).exists())
+        .unwrap_or(false)
+}
+
 pub fn sanitize_version(version: &String) -> String {
     let mut version = version.clone();
     if version.starts_with("v") {

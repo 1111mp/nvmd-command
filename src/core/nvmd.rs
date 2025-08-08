@@ -2,6 +2,7 @@ use super::ExitStatus;
 use super::{anyhow, Result};
 
 use crate::common::{INSTALLTION_DIRECTORY, NVMD_PATH, VERSION};
+use crate::node::Node;
 use crate::utils::group::{
     find_group_by_name, get_groups, is_group_name, update_group_info_by_name,
 };
@@ -21,7 +22,15 @@ use std::{cmp::Ordering, collections::HashSet, env};
 use version_compare::{compare, Cmp};
 
 #[derive(Parser)]
-#[command(name=env!("CARGO_PKG_NAME"), author=env!("CARGO_PKG_AUTHORS"), version=env!("CARGO_PKG_VERSION"), about="command tools for nvm-desktop", after_help="Please download new version of Node.js in nvm-desktop.", long_about = None)]
+#[command(
+    name = env!("CARGO_PKG_NAME"),
+    author = env!("CARGO_PKG_AUTHORS"),
+    version = env!("CARGO_PKG_VERSION"),
+    about = "command tools for nvm-desktop",
+    after_help = "Please download new version of Node.js in nvm-desktop.",
+    long_about = None,
+    styles = CLAP_STYLING
+)]
 #[command(help_template = "\
 {before-help}{name} ({version})
 {about-with-newline}
@@ -34,10 +43,30 @@ struct Cli {
     command: Option<Commands>,
 }
 
+// See also `clap_cargo::style::CLAP_STYLING`
+pub const CLAP_STYLING: clap::builder::styling::Styles = clap::builder::styling::Styles::styled()
+    .header(clap_cargo::style::HEADER)
+    .usage(clap_cargo::style::USAGE)
+    .literal(clap_cargo::style::LITERAL)
+    .placeholder(clap_cargo::style::PLACEHOLDER)
+    .error(clap_cargo::style::ERROR)
+    .valid(clap_cargo::style::VALID)
+    .invalid(clap_cargo::style::INVALID);
+
 #[derive(Subcommand)]
 enum Commands {
     /// Get the currently used version
     Current {},
+    /// Install the specified version of Node.js
+    Install {
+        /// The version number of Node.js
+        version: String,
+    },
+    /// Uninstall the specified version of Node.js
+    Uninstall {
+        /// The version number of Node.js
+        version: String,
+    },
     /// List the all installed versions of Node.js
     List {
         /// List tha all groups of the project
@@ -71,6 +100,11 @@ pub(super) fn command() -> Result<ExitStatus> {
 
     let ret = match &cli.command {
         Some(Commands::Current {}) => command_for_current(),
+        Some(Commands::Install { version }) => Node::install(version),
+        Some(Commands::Uninstall { version }) => {
+            eprintln!("{}", version);
+            Ok(())
+        }
         Some(Commands::Ls { group }) | Some(Commands::List { group }) => {
             if *group {
                 command_for_list_group()

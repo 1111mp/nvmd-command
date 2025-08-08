@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use fs_extra::file::read_to_string;
 use lazy_static::lazy_static;
+use once_cell::sync::OnceCell;
 use std::{env, ffi::OsString, path::PathBuf};
 
 use crate::utils::setting::get_directory;
@@ -96,4 +97,16 @@ fn get_nvmd_path() -> Result<PathBuf> {
     let mut home = dirs::home_dir().context("home directory not found")?;
     home.push(".nvmd");
     Ok(home)
+}
+
+fn default_nvmd_home() -> Result<PathBuf> {
+    let mut home = dirs::home_dir().context("Could not determine home directory")?;
+    home.push(".nvmd");
+    Ok(home)
+}
+
+static NVMD_HOME: OnceCell<PathBuf> = OnceCell::new();
+
+pub fn nvmd_home<'a>() -> Result<&'a PathBuf> {
+    NVMD_HOME.get_or_try_init(default_nvmd_home)
 }
