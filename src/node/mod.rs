@@ -160,7 +160,7 @@ impl Node {
     }
 
     pub fn ensure_fetched(&self) -> Result<()> {
-        match node_available(&self.version.to_string()) {
+        match node_available(&self.version.to_string())? {
             true => {
                 eprintln!("{} has already been installed, skipping download", self);
             }

@@ -1,6 +1,6 @@
-use super::help::read_json;
-use crate::common::nvmd_home;
-use anyhow::{anyhow, Result};
+use super::nvmd_home;
+use crate::utils::help::read_json;
+use anyhow::Result;
 use once_cell::sync::OnceCell;
 use serde::Deserialize;
 use std::path::PathBuf;
@@ -19,8 +19,8 @@ impl Setting {
         static SETTING: OnceCell<Setting> = OnceCell::new();
 
         SETTING.get_or_try_init(|| {
-            let setting_file = nvmd_home()?.join("setting.json");
-            match read_json::<Setting>(&setting_file) {
+            let path = nvmd_home()?.setting_path();
+            match read_json::<Setting>(&path) {
                 Ok(setting) => Ok(setting),
                 Err(_) => Ok(Setting::template()),
             }
@@ -41,15 +41,9 @@ impl Setting {
     }
 
     pub fn get_directory(&self) -> Result<PathBuf> {
-        self.directory
+        Ok(self
+            .directory
             .clone()
-            .ok_or(anyhow!("Could not determine node install directory"))
-    }
-}
-
-pub fn get_directory(path: &PathBuf) -> Option<PathBuf> {
-    match read_json::<Setting>(&path) {
-        Ok(setting) => setting.directory.map(|directory| PathBuf::from(directory)),
-        Err(_) => None,
+            .unwrap_or(nvmd_home()?.versions_dir()))
     }
 }

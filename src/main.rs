@@ -1,6 +1,6 @@
-mod command;
-mod common;
+mod cli;
 mod core;
+mod module;
 mod node;
 mod signal;
 mod utils;

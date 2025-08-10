@@ -1,14 +1,9 @@
 use super::ExitStatus;
 use super::{anyhow, Result};
-
-use crate::common::{INSTALLTION_DIRECTORY, NVMD_PATH, VERSION};
+use crate::module::{nvmd_home, Context, Groups, Projects, Setting};
 use crate::node::Node;
-use crate::utils::group::{
-    find_group_by_name, get_groups, is_group_name, update_group_info_by_name,
-};
-use crate::utils::help::{is_valid_version, sanitize_version};
-use crate::utils::project::update_project_info_by_path;
-
+use crate::utils::help::{node_strict_available, sanitize_version};
+use anyhow::bail;
 use clap::{Parser, Subcommand};
 use fs_extra::{
     dir::{ls, DirEntryAttr, DirEntryValue},
@@ -131,7 +126,7 @@ pub(super) fn command() -> Result<ExitStatus> {
 
 /// nvmd current
 fn command_for_current() -> Result<()> {
-    if let Some(version) = VERSION.clone() {
+    if let Some(version) = Context::global()?.get_version() {
         eprintln!("v{}", version);
     }
     Ok(())
@@ -139,13 +134,11 @@ fn command_for_current() -> Result<()> {
 
 /// nvmd ls --group
 fn command_for_list_group() -> Result<()> {
-    if let Some(groups) = get_groups()? {
-        for group in &groups {
-            if let Some(version) = &group.version {
-                eprintln!("{} v{}", group.name, version);
-            } else {
-                eprintln!("{}", group.name);
-            }
+    for group in &Groups::new()?.data {
+        if let Some(version) = &group.version {
+            eprintln!("{} v{}", group.name, version);
+        } else {
+            eprintln!("{}", group.name);
         }
     }
     Ok(())
@@ -153,68 +146,73 @@ fn command_for_list_group() -> Result<()> {
 
 /// nvmd list or nvmd ls
 fn command_for_list() -> Result<()> {
-    if let Some(install_path) = INSTALLTION_DIRECTORY.clone() {
-        let mut config = HashSet::new();
-        config.insert(DirEntryAttr::Name);
-        let ls_result = ls(&install_path, &config)?;
-        let mut versions: Vec<String> = vec![];
-        for item in ls_result.items {
-            if let Some(DirEntryValue::String(version)) = item.get(&DirEntryAttr::Name) {
-                if is_valid_version(version) {
-                    versions.push(version.to_string());
-                }
-            }
-        }
-        versions.sort_by(|a, b| match compare(b, a) {
-            Ok(Cmp::Lt) => Ordering::Less,
-            Ok(Cmp::Eq) => Ordering::Equal,
-            Ok(Cmp::Gt) => Ordering::Greater,
-            _ => unreachable!(),
-        });
-        let target_version = VERSION.clone().unwrap_or_default();
-        for version in versions {
-            if version == target_version {
-                eprintln!("v{} (currently)", version);
-            } else {
-                eprintln!("v{}", version);
+    let path = Setting::global()?.get_directory()?;
+    let mut config = HashSet::new();
+    config.insert(DirEntryAttr::Name);
+    let ls_result = ls(&path, &config)?;
+
+    let mut versions: Vec<String> = vec![];
+    for item in ls_result.items {
+        if let Some(DirEntryValue::String(version)) = item.get(&DirEntryAttr::Name) {
+            if node_strict_available(version)? {
+                versions.push(version.to_string());
             }
         }
     }
+    versions.sort_by(|a, b| match compare(b, a) {
+        Ok(Cmp::Lt) => Ordering::Less,
+        Ok(Cmp::Eq) => Ordering::Equal,
+        Ok(Cmp::Gt) => Ordering::Greater,
+        _ => unreachable!(),
+    });
+    let target_version = Context::global()?.get_version().unwrap_or_default();
+    for version in versions {
+        if version == target_version {
+            eprintln!("v{} (currently)", version);
+        } else {
+            eprintln!("v{}", version);
+        }
+    }
+
     Ok(())
 }
 
 /// nvmd use {version}
-fn command_for_use_global(ver: &String) -> Result<()> {
-    if is_group_name(ver)? {
-        return Err(anyhow!("{} can only be used for projects", ver));
+fn command_for_use_global(input: &String) -> Result<()> {
+    let groups = Groups::new()?;
+    if groups.exists(input) {
+        bail!("{} can only be used for projects", input)
     }
-    let version = sanitize_version(ver);
-    if !is_valid_version(&version) {
-        eprintln!("nvm-desktop: v{} has not been installed", &version);
-        return Ok(());
+
+    let version = sanitize_version(input);
+    if !node_strict_available(&version)? {
+        bail!("Node@v{} has not been installed", &version);
     }
-    if let Some(mut default_path) = NVMD_PATH.clone() {
-        default_path.push("default");
-        write_all(default_path, &version)?;
-        eprintln!("Now using node v{}", &version);
-    }
+
+    let default_path = nvmd_home()?.default_path();
+    write_all(default_path, &version)?;
+    eprintln!("Now using node v{}", &version);
+
     Ok(())
 }
 
 /// nvmd use {version} --project
 fn command_for_use_project(input: &String) -> Result<()> {
-    let group = find_group_by_name(input)?;
+    let mut groups = Groups::new()?;
+    let group = groups.find_by_name(input);
     let is_group = group.is_some();
-    let version = if let Some(group) = group {
-        group
-            .version
-            .ok_or_else(|| anyhow!("the nodejs version of the {} has not been set yet", input))?
-    } else {
-        sanitize_version(input)
+    let version = match group {
+        Some(g) => g.version.clone().ok_or_else(|| {
+            anyhow!(
+                "The Node.js version for group '{}' has not been set yet",
+                input
+            )
+        })?,
+        None => sanitize_version(input),
     };
-    if !is_valid_version(&version) {
-        eprintln!("nvm-desktop: v{} has not been installed", &version);
-        return Ok(());
+
+    if !node_strict_available(&version)? {
+        bail!("Node@v{} has not been installed", &version);
     }
 
     let project_path = env::current_dir()?;
@@ -224,18 +222,18 @@ fn command_for_use_project(input: &String) -> Result<()> {
         .and_then(|name| name.to_str())
         .unwrap();
 
-    update_project_info_by_path(
+    Projects::update_and_save(
         project_path_str,
         project_name,
         if is_group { input } else { &version },
     )?;
     if is_group {
-        update_group_info_by_name(input, project_path_str)?;
+        groups.update(&input, project_path_str);
+        groups.save()?;
     }
 
-    let mut nvmdrc_file = project_path.clone();
-    nvmdrc_file.push(".nvmdrc");
-    write_all(nvmdrc_file, &version)?;
+    let nvmdrc = project_path.join(".nvmdrc");
+    write_all(nvmdrc, &version)?;
     if is_group {
         eprintln!("Now using node v{} ({})", &version, input);
     } else {
@@ -248,16 +246,15 @@ fn command_for_use_project(input: &String) -> Result<()> {
 /// nvmd which {version}
 fn command_for_which(ver: &String) -> Result<()> {
     let version = sanitize_version(ver);
-    if let Some(mut version_path) = INSTALLTION_DIRECTORY.clone() {
-        version_path.push(&version);
-        if cfg!(unix) {
-            version_path.push("bin");
-        }
-        if version_path.exists() {
-            eprintln!("{:?}", version_path);
-        } else {
-            eprintln!("nvm-desktop: the version cannot be found: v{}", &version);
-        }
+    let mut path = Setting::global()?.get_directory()?.join(&version);
+    if cfg!(unix) {
+        path.push("bin");
     }
+    if path.exists() {
+        eprintln!("{:?}", path);
+    } else {
+        bail!("Node@v{} cannot be found", &version);
+    }
+
     Ok(())
 }

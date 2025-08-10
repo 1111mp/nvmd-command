@@ -1,36 +1,17 @@
-use super::{anyhow, Result};
 use super::{ExitStatus, OsStr, OsString};
-
+use crate::module::{Context, PackageJson, Packages};
 use crate::signal::pass_control_to_shim;
-use crate::utils::help::link_package;
-use crate::utils::package::{
-    collect_package_bin_names, collect_package_bin_names_for_link,
-    collect_package_bin_names_from_curdir, record_installed_package_info,
-    record_uninstall_package_info,
-};
-use crate::{
-    command as CommandTool,
-    common::{ENV_PATH, INSTALLTION_DIRECTORY, VERSION},
-};
-
-use anyhow::bail;
-use lazy_static::lazy_static;
+use crate::utils::command;
+use crate::utils::help::{link_package, unlink_package};
+use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
+use once_cell::sync::Lazy;
 use regex::Regex;
 use std::path::Path;
-use std::{
-    io::{BufRead, BufReader},
-    path::PathBuf,
-    process::Stdio,
-    sync::Mutex,
-};
+use std::sync::Mutex;
+use std::{path::PathBuf, process::Stdio};
 
-lazy_static! {
-    pub static ref UNINSTALL_PACKAGES_NAME: Mutex<Vec<String>> = {
-        let m = Vec::new();
-        Mutex::new(m)
-    };
-    static ref SKIP_NEXT: Mutex<bool> = Mutex::new(false);
-}
+static UNINSTALL_PACKAGES_NAME: Lazy<Mutex<Vec<String>>> = Lazy::new(|| Mutex::new(Vec::new()));
+static SKIP_NEXT: Lazy<Mutex<bool>> = Lazy::new(|| Mutex::new(false));
 
 /// Aliases that npm supports for the 'install' command
 const NPM_INSTALL_ALIASES: [&str; 12] = [
@@ -45,90 +26,77 @@ const NPM_LINK_ALIASES: [&str; 2] = ["link", "ln"];
 const NPM_UPDATE_ALIASES: [&str; 4] = ["update", "udpate", "upgrade", "up"];
 
 pub(super) fn command(exe: &OsStr, args: &[OsString]) -> Result<ExitStatus> {
-    match ENV_PATH.as_ref() {
-        Some(env_path) => env_path,
-        None => {
-            if VERSION.is_none() {
-                bail!("the default node version is not set, you can set it by executing \"nvmd use {{version}}\"");
-            }
-            if let Some(version) = VERSION.as_ref() {
-                bail!(
-                    "version v{} is not installed, please install it before using",
-                    version
-                );
-            }
-            bail!("command not found: {:?}", exe);
-        }
-    };
-    let lib_path = INSTALLTION_DIRECTORY.clone().and_then(|mut path| {
-        VERSION.clone().map(|version| {
-            path.push(version);
-            if cfg!(unix) {
-                path.push("bin");
-            }
-            path.push(exe);
-            path
-        })
-    });
-    // Check if the path exists and return an error if it doesn't
-    match lib_path {
-        Some(ref path) if path.exists() => path,
-        _ => return Err(anyhow!("command not found: {:?}", exe)),
-    };
+    let path = Context::global()?.env_path()?;
 
     let mut positionals = args.iter().filter(is_positional).map(|arg| arg.as_os_str());
     let status = match positionals.next() {
         Some(cmd) if NPM_INSTALL_ALIASES.iter().any(|a| a == &cmd) => {
             let tools: Vec<_> = positionals.collect();
-            command_install_executor(exe, args, tools)
+            command_install_executor(&path, exe, args, tools)
         }
         Some(cmd) if NPM_UNINSTALL_ALIASES.iter().any(|a| a == &cmd) => {
             let tools: Vec<_> = positionals.collect();
-            command_uninstall_executor(exe, args, tools)
+            command_uninstall_executor(&path, exe, args, tools)
         }
         Some(cmd) if cmd == "unlink" => {
             let tools: Vec<_> = positionals.collect();
-            command_unlink_executor(exe, args, tools)
+            command_unlink_executor(&path, exe, args, tools)
         }
         Some(cmd) if NPM_LINK_ALIASES.iter().any(|a| a == &cmd) => {
             let tools: Vec<_> = positionals.collect();
-            command_link_executor(exe, args, tools)
+            command_link_executor(&path, exe, args, tools)
         }
         Some(cmd) if NPM_UPDATE_ALIASES.iter().any(|a| a == &cmd) => {
             let tools: Vec<_> = positionals.collect();
-            command_update_executor(exe, args, tools)
+            command_update_executor(&path, exe, args, tools)
         }
-        _ => executor(exe, args),
+        _ => executor(&path, exe, args),
     }?;
 
     Ok(status)
 }
 
-/// npm instll command
+fn executor<A>(path: &OsString, exe: &OsStr, args: &[A]) -> Result<ExitStatus>
+where
+    A: AsRef<OsStr>,
+{
+    let mut command = command::create_command(exe);
+    command.args(args);
+    command.env("PATH", path);
+
+    pass_control_to_shim();
+
+    let status = command.status()?;
+    Ok(status)
+}
+
+/// npm install command
 fn command_install_executor(
+    path: &OsString,
     exe: &OsStr,
     args: &[OsString],
     tools: Vec<&OsStr>,
 ) -> Result<ExitStatus> {
-    let status = executor(exe, args)?;
-    if status.success() && command_has_global(args) {
-        global_install_packages(tools)?;
+    let status = executor(path, exe, args)?;
+    if status.success() && is_global(args) {
+        global_install_packages(path, tools)?;
     }
     Ok(status)
 }
 
-/// npm uninstll command
+/// npm uninstall command
 fn command_uninstall_executor(
+    path: &OsString,
     exe: &OsStr,
     args: &[OsString],
     tools: Vec<&OsStr>,
 ) -> Result<ExitStatus> {
-    let has_global = command_has_global(args);
+    let has_global = is_global(args);
     if has_global {
-        collect_packages_names_before_uninstall(tools)?;
+        collect_packages_before_uninstall(path, tools)?;
     }
 
-    let status = executor(exe, args)?;
+    let status = executor(path, exe, args)?;
     if status.success() && has_global {
         global_uninstall_packages()?;
     }
@@ -137,16 +105,17 @@ fn command_uninstall_executor(
 
 /// npm unlink command
 fn command_unlink_executor(
+    path: &OsString,
     exe: &OsStr,
     args: &[OsString],
     tools: Vec<&OsStr>,
 ) -> Result<ExitStatus> {
-    let has_global = command_has_global(args);
+    let has_global = is_global(args);
     if has_global {
-        collection_packages_name_for_unlink(tools)?;
+        collection_packages_name_for_unlink(path, tools)?;
     }
 
-    let status = executor(exe, args)?;
+    let status = executor(path, exe, args)?;
 
     if status.success() && has_global {
         global_uninstall_packages()?;
@@ -156,8 +125,13 @@ fn command_unlink_executor(
 }
 
 /// npm link command
-fn command_link_executor(exe: &OsStr, args: &[OsString], tools: Vec<&OsStr>) -> Result<ExitStatus> {
-    let status = executor(exe, args)?;
+fn command_link_executor(
+    path: &OsString,
+    exe: &OsStr,
+    args: &[OsString],
+    tools: Vec<&OsStr>,
+) -> Result<ExitStatus> {
+    let status = executor(path, exe, args)?;
 
     if status.success() {
         global_link_packages(tools)?;
@@ -168,24 +142,29 @@ fn command_link_executor(exe: &OsStr, args: &[OsString], tools: Vec<&OsStr>) -> 
 
 /// npm update command
 fn command_update_executor(
+    path: &OsString,
     exe: &OsStr,
     args: &[OsString],
     tools: Vec<&OsStr>,
 ) -> Result<ExitStatus> {
-    let status = executor(exe, args)?;
+    let status = executor(path, exe, args)?;
 
-    if status.success() && command_has_global(args) {
-        global_install_packages(tools)?;
+    if status.success() && is_global(args) {
+        global_install_packages(path, tools)?;
     }
 
     Ok(status)
 }
 
 fn global_link_packages(tools: Vec<&OsStr>) -> Result<()> {
-    let package_bin_names = get_package_bin_names_for_link(tools)?;
-    if !package_bin_names.is_empty() {
-        record_installed_package_info(&package_bin_names)?;
-        for name in &package_bin_names {
+    let names = get_package_bin_names_for_link(tools)?;
+    let version = Context::global()?.get_version().unwrap_or_default();
+    if !names.is_empty() {
+        let mut pkg = Packages::new()?;
+        pkg.record_installed(&names, &version);
+        pkg.save()?;
+
+        for name in &names {
             link_package(name)?;
         }
     }
@@ -193,43 +172,58 @@ fn global_link_packages(tools: Vec<&OsStr>) -> Result<()> {
     Ok(())
 }
 
-fn global_install_packages(tools: Vec<&OsStr>) -> Result<()> {
-    let re_str = "@[0-9]|@latest|@\"|@npm:";
-    let re: Regex = Regex::new(re_str).unwrap();
-    let packages = &tools
-        .iter()
-        .map(|name| {
-            let package = name.to_str().unwrap();
+fn global_install_packages(path: &OsString, tools: Vec<&OsStr>) -> Result<()> {
+    // let re_str = "@[0-9]|@latest|@\"|@npm:";
+    let reg: Regex = Regex::new("@[0-9]|@latest|@\"|@npm:").unwrap();
+    let npm_prefix = get_npm_prefix(path)?;
+    let version = Context::global()?.get_version().unwrap_or_default();
+    let mut package_names = vec![];
 
-            match re.find(&package) {
+    tools
+        .into_iter()
+        .map(|name| {
+            let package = name.to_str().unwrap_or_default();
+
+            match reg.find(&package) {
                 None => OsStr::new(package),
                 Some(mat) => OsStr::new(&package[0..(mat.start())]),
             }
         })
-        .collect();
+        .for_each(|pkg| {
+            let names = PackageJson::new(&npm_prefix, pkg).bin_names();
+            if !names.is_empty() {
+                package_names.extend(names.iter().cloned());
+                for name in names {
+                    let _ = link_package(&name);
+                }
+            }
+        });
 
-    let npm_perfix = get_npm_perfix();
-    let package_bin_names = collect_package_bin_names(&npm_perfix, packages)?;
-    if !package_bin_names.is_empty() {
-        record_installed_package_info(&package_bin_names)?;
-        for name in &package_bin_names {
-            link_package(name)?;
-        }
-    }
+    let mut pkg = Packages::new()?;
+    pkg.record_installed(&package_names, &version);
+    pkg.save()?;
 
     Ok(())
 }
 
 fn global_uninstall_packages() -> Result<()> {
     let names = UNINSTALL_PACKAGES_NAME.lock().unwrap();
-    record_uninstall_package_info(&names)?;
+    let version = Context::global()?.get_version().unwrap_or_default();
+    let mut pkg = Packages::new()?;
+    let need_remove_packages = pkg.record_uninstalled(&names, &version);
+    pkg.save()?;
+
+    for package in need_remove_packages {
+        unlink_package(&package)?;
+    }
+
     Ok(())
 }
 
 /// For unlink, should to find the current project name when without package argument.
-fn collection_packages_name_for_unlink(tools: Vec<&OsStr>) -> Result<()> {
-    let npm_perfix = get_npm_perfix();
-    let package_bin_names = get_package_bin_names_for_unlink(tools, &npm_perfix)?;
+fn collection_packages_name_for_unlink(path: &OsString, tools: Vec<&OsStr>) -> Result<()> {
+    let npm_prefix = get_npm_prefix(path)?;
+    let package_bin_names = get_package_bin_names_for_unlink(tools, &npm_prefix)?;
     if !package_bin_names.is_empty() {
         let mut global_names = UNINSTALL_PACKAGES_NAME.lock().unwrap();
         for name in package_bin_names {
@@ -241,50 +235,54 @@ fn collection_packages_name_for_unlink(tools: Vec<&OsStr>) -> Result<()> {
 }
 
 /// collect the bin name of the package before uninstalling it globally
-fn collect_packages_names_before_uninstall(tools: Vec<&OsStr>) -> Result<()> {
-    let npm_perfix = get_npm_perfix();
-    let package_bin_names = collect_package_bin_names(&npm_perfix, &tools)?;
-    if !package_bin_names.is_empty() {
-        let mut global_names = UNINSTALL_PACKAGES_NAME.lock().unwrap();
-        for name in package_bin_names {
-            global_names.push(name);
-        }
+fn collect_packages_before_uninstall(path: &OsString, tools: Vec<&OsStr>) -> Result<()> {
+    let npm_perfix = get_npm_prefix(path)?;
+
+    let packages = tools
+        .into_iter()
+        .flat_map(|tool| PackageJson::new(&npm_perfix, tool).bin_names())
+        .collect::<Vec<String>>();
+
+    if !packages.is_empty() {
+        UNINSTALL_PACKAGES_NAME.lock().unwrap().extend(packages);
     }
 
     Ok(())
 }
 
-fn get_npm_perfix() -> String {
-    let mut command = CommandTool::create_command("npm");
+fn get_npm_prefix(path: &OsString) -> Result<PathBuf> {
+    let mut command = command::create_command("npm");
 
-    let child = command
-        .env("PATH", ENV_PATH.clone().unwrap())
+    let output = command
         .args(["root", "-g"])
+        .env("PATH", path)
         .stdout(Stdio::piped())
-        .spawn()
-        .expect("nvmd-desktop: get npm perfix error");
+        .output()
+        .with_context(|| anyhow!("No valid npm prefix found"))?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
 
-    let output = child.stdout.unwrap();
-    let lines = BufReader::new(output).lines();
-    let mut perfix = String::from("");
-    for line in lines {
-        let cur_line = line.unwrap();
-        if PathBuf::from(&cur_line).is_dir() {
-            perfix = cur_line;
+    for line in stdout.lines() {
+        let pb = PathBuf::from(line.trim());
+        if pb.is_dir() {
+            return Ok(pb);
         }
     }
 
-    perfix
+    bail!("No valid npm prefix found");
 }
 
 fn get_package_bin_names_for_unlink(
     tools: Vec<&OsStr>,
-    npm_perfix: &String,
+    npm_prefix: &PathBuf,
 ) -> Result<Vec<String>> {
     if tools.is_empty() {
-        return collect_package_bin_names_from_curdir();
+        return Ok(PackageJson::from_current_dir()?.bin_names());
     }
-    collect_package_bin_names(npm_perfix, &tools)
+
+    Ok(tools
+        .into_iter()
+        .flat_map(|tool| PackageJson::new(&npm_prefix, tool).bin_names())
+        .collect::<Vec<String>>())
 }
 
 /// The link command supports execution from the current package directory without parameters.
@@ -294,38 +292,31 @@ fn get_package_bin_names_for_unlink(
 fn get_package_bin_names_for_link(tools: Vec<&OsStr>) -> Result<Vec<String>> {
     // 'npm link'
     if tools.is_empty() {
-        return collect_package_bin_names_from_curdir();
+        return Ok(PackageJson::from_current_dir()?.bin_names());
     }
 
     // 'npm link package' or 'npm link ../package'
     // We only need to deal with 'npm link ../package'
-    let packages: Vec<&OsStr> = tools
+    let names: Vec<&OsStr> = tools
         .iter()
         .filter(is_relative_path)
         .map(|&path| path)
         .collect();
 
-    if packages.is_empty() {
+    if names.is_empty() {
         return Ok(vec![]);
     }
 
-    collect_package_bin_names_for_link(&packages)
+    Ok(names
+        .into_iter()
+        .map(|name| PackageJson::from_current_dir_with_pkg(name).map(|pkg| pkg.bin_names()))
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .flatten()
+        .collect())
 }
 
-fn executor<A>(exe: &OsStr, args: &[A]) -> Result<ExitStatus>
-where
-    A: AsRef<OsStr>,
-{
-    let mut command = CommandTool::create_command(exe);
-    command.env("PATH", ENV_PATH.clone().unwrap()).args(args);
-
-    pass_control_to_shim();
-
-    let status = command.status()?;
-    Ok(status)
-}
-
-fn command_has_global<A>(args: &[A]) -> bool
+fn is_global<A>(args: &[A]) -> bool
 where
     A: AsRef<OsStr>,
 {

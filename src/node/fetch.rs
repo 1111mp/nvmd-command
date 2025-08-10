@@ -3,7 +3,8 @@
 /// https://github.com/volta-cli/volta
 ///
 use super::{tool_version, Node};
-use crate::utils::{progress::progress_bar, setting::Setting};
+use crate::module::Setting;
+use crate::utils::progress::progress_bar;
 use anyhow::{anyhow, Context, Result};
 use archive::Archive;
 use fs_utils::ensure_containing_dir_exists;
