@@ -33,11 +33,11 @@ pub(super) fn command(exe: &OsStr, args: &[OsString]) -> Result<ExitStatus> {
 
     let install_directory = args.iter().any(|a| a == INSTALL_DIRECTORY);
     if !install_directory {
-        if args.iter().all(|a| a == ENABLE) {
+        if args.iter().any(|a| a == ENABLE) {
             corepack_manager(args, true)?;
         }
 
-        if args.iter().all(|a| a == DISABLE) {
+        if args.iter().any(|a| a == DISABLE) {
             corepack_manager(args, false)?;
         }
     }
