@@ -72,7 +72,10 @@ at {:?}",
 
     progress.finish_and_clear();
 
-    eprintln!("Installing node in '{}'", dest.display());
+    eprintln!(
+        "{}",
+        console::style(format!("Installing node in '{}'", dest.display())).green()
+    );
 
     Ok(())
 }

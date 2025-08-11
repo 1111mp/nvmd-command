@@ -23,7 +23,7 @@ fn main() {
         }
         Err(error) => {
             // Print error messages to standard error output
-            eprintln!("nvm-desktop: {}", style(error).red().bold());
+            eprintln!("nvm-desktop: {}", style(error).red());
             process::exit(1);
         }
     }

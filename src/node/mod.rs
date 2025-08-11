@@ -162,24 +162,19 @@ impl Node {
     pub fn ensure_fetched(&self) -> Result<()> {
         match node_available(&self.version.to_string())? {
             true => {
-                eprintln!("{} has already been installed, skipping download", self);
+                eprintln!(
+                    "{}",
+                    console::style(format!(
+                        "{} has already been installed, skipping download",
+                        self
+                    ))
+                    .yellow()
+                );
             }
             false => {
                 fetch::fetch(&self.version)?;
             }
         };
-
-        Ok(())
-    }
-
-    pub fn install(version: &String) -> Result<()> {
-        let version = version.parse::<Version>().with_context(|| {
-            anyhow!(
-                "Failed to parse Node version {} \nPlease ensure the correct version is specified.",
-                version
-            )
-        })?;
-        Node::new(version).ensure_fetched()?;
 
         Ok(())
     }

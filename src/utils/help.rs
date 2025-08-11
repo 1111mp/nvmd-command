@@ -1,6 +1,6 @@
 use crate::module::nvmd_home;
 use crate::module::Setting;
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use fs_extra::file::{remove, write_all};
 use serde::de::DeserializeOwned;
 use std::{fs, path::PathBuf};
@@ -25,6 +25,15 @@ pub fn write_json<T: serde::Serialize>(path: &PathBuf, data: &T) -> Result<()> {
     let json_content = serde_json::to_string_pretty(data)?;
     write_all(path, &json_content)?;
     Ok(())
+}
+
+pub fn node_version_parse(input: &str) -> Result<node_semver::Version> {
+    node_semver::Version::parse(input).with_context(|| {
+        anyhow!(
+            "Failed to parse Node version {} \nPlease ensure the correct version is specified.",
+            input
+        )
+    })
 }
 
 pub fn node_strict_available(version: &str) -> Result<bool> {

@@ -1,9 +1,10 @@
-use super::Result;
-use super::{ExitStatus, OsStr, OsString};
 use crate::module::{Context, Packages};
 use crate::signal::pass_control_to_shim;
 use crate::utils::command;
 use crate::utils::help::{link_package, unlink_package};
+use anyhow::Result;
+use std::ffi::{OsStr, OsString};
+use std::process::ExitStatus;
 
 const ENABLE: &str = "enable";
 const DISABLE: &str = "disable";

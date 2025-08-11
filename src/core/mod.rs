@@ -28,17 +28,6 @@ pub fn execute() -> Result<ExitStatus> {
     }
 }
 
-// fn get_executor(exe: &OsStr, args: &[OsString]) -> Result<executor::Executor> {
-//     match exe.to_str() {
-//         Some("nvmd") => nvmd::command(args),
-//         Some("node") => node::command(args),
-//         Some("npx") => npx::command(args),
-//         Some("corepack") => corepack::command(args),
-//         Some("npm") => npm::command(args),
-//         _ => binary::command(exe, args),
-//     }
-// }
-
 fn get_tool_name(args: &mut ArgsOs) -> Result<OsString> {
     args.next()
         .and_then(|arg0| Path::new(&arg0).file_name().map(tool_name_from_file_name))
