@@ -42,9 +42,15 @@ impl Context {
         }
 
         let old_env_path = envoy::path().unwrap_or_else(|| envoy::Var::from(""));
-        old_env_path.split().prefix(&path).join().with_context(|| {
-            anyhow!("Could not create execution environment.\nPlease ensure your PATH is valid.")
-        })
+        old_env_path
+            .split()
+            .prefix_entry(&path)
+            .join()
+            .with_context(|| {
+                anyhow!(
+                    "Could not create execution environment.\nPlease ensure your PATH is valid."
+                )
+            })
     }
 }
 

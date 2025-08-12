@@ -19,19 +19,16 @@ impl Setting {
         static SETTING: OnceCell<Setting> = OnceCell::new();
 
         SETTING.get_or_try_init(|| {
-            let path = nvmd_home()?.setting_path();
+            let home = nvmd_home()?;
+            let path = home.setting_path();
             match read_json::<Setting>(&path) {
                 Ok(setting) => Ok(setting),
-                Err(_) => Ok(Setting::template()),
+                Err(_) => Ok(Self {
+                    directory: Some(home.versions_dir()),
+                    mirror: Some("https://nodejs.org/dist".into()),
+                }),
             }
         })
-    }
-
-    pub fn template() -> Self {
-        Self {
-            directory: None,
-            mirror: Some("https://nodejs.org/dist".into()),
-        }
     }
 
     pub fn get_mirror(&self) -> String {

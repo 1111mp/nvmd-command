@@ -2,6 +2,7 @@ mod cli;
 mod core;
 mod module;
 mod node;
+mod npm;
 mod signal;
 mod utils;
 

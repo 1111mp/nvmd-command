@@ -72,8 +72,8 @@ pub enum Bin {
 }
 
 impl PackageJson {
-    pub fn new(prefix: &PathBuf, pkg: &OsStr) -> Self {
-        let path = prefix.join(pkg).join("package.json");
+    pub fn new(prefix: &PathBuf, pkg: impl AsRef<OsStr>) -> Self {
+        let path = prefix.join(pkg.as_ref()).join("package.json");
         read_json::<PackageJson>(&path).unwrap_or_default()
     }
 
@@ -82,9 +82,9 @@ impl PackageJson {
         read_json::<PackageJson>(&path)
     }
 
-    pub fn from_current_dir_with_pkg(pkg: &OsStr) -> Result<Self> {
+    pub fn from_current_dir_with_pkg(pkg: impl AsRef<OsStr>) -> Result<Self> {
         let path = env::current_dir()?
-            .join(pkg)
+            .join(pkg.as_ref())
             .join("package.json")
             .canonicalize()?;
         read_json::<PackageJson>(&path)
