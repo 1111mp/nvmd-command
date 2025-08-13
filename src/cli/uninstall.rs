@@ -1,4 +1,7 @@
-use crate::{module::Setting, utils::help::node_version_parse};
+use crate::{
+    module::Setting,
+    utils::{help::node_version_parse, notice::Notice},
+};
 use anyhow::{bail, Result};
 use console::style;
 use fs_extra::dir;
@@ -30,6 +33,8 @@ impl super::Command for Uninstall {
             ))
             .green()
         );
+
+        let _ = Notice::from_version().send();
 
         Ok(())
     }

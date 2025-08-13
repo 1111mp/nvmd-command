@@ -9,6 +9,7 @@ authors = ["The1111mp <The1111mp@outlook.com>"]
 [dependencies]
 anyhow = "1.0"
 archive = { path = "crates/archive" }
+attohttpc = { version = "0.30", features = ["json"] }
 cfg-if = "1.0"
 clap = { version = "4.5", features = ["derive"] }
 clap-cargo = { version = "0.16", default-features = false }

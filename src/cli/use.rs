@@ -1,6 +1,9 @@
 use crate::{
     module::{nvmd_home, Groups, Projects},
-    utils::help::{node_strict_available, node_version_parse},
+    utils::{
+        help::{node_strict_available, node_version_parse},
+        notice::Notice,
+    },
 };
 use anyhow::{anyhow, bail, Result};
 use fs_extra::file::write_all;
@@ -39,6 +42,8 @@ impl Use {
         let default_path = nvmd_home()?.default_path();
         write_all(default_path, &version.to_string())?;
         eprintln!("Now using node v{}", &version);
+
+        let _ = Notice::from_current(version.to_string()).send();
 
         Ok(())
     }
@@ -86,6 +91,16 @@ impl Use {
         } else {
             eprintln!("Now using node v{}", &version);
         }
+
+        let _ = Notice::from_project(
+            project_name.to_string(),
+            if is_group {
+                self.version
+            } else {
+                version.to_string()
+            },
+        )
+        .send();
 
         Ok(())
     }

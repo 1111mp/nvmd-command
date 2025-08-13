@@ -1,5 +1,8 @@
 use super::common;
-use crate::module::{Context, PackageJson, Packages};
+use crate::{
+    module::{Context, PackageJson, Packages},
+    utils::help::link_package,
+};
 use anyhow::Result;
 use regex::Regex;
 use std::ffi::OsStr;
@@ -39,6 +42,10 @@ impl InstallArgs<'_> {
         let mut packages = Packages::new()?;
         packages.record_installed(&pkg_names, &version);
         packages.save()?;
+
+        for name in &pkg_names {
+            link_package(name)?;
+        }
 
         Ok(())
     }

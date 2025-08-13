@@ -13,7 +13,6 @@ use std::{env, process::ExitStatus};
     author = env!("CARGO_PKG_AUTHORS"),
     version = env!("CARGO_PKG_VERSION"),
     about = "command tools for nvm-desktop",
-    after_help = "Please download new version of Node.js in nvm-desktop.",
     long_about = None,
     styles = CLAP_STYLING
 )]
