@@ -35,25 +35,39 @@ Please download and install the latest release of node in the `nvm-desktop` appl
 
 ```shell
 $ nvmd --help
-nvmd (2.2.0)
-The1111mp@outlook.com
+nvmd (4.1.0)
 command tools for nvm-desktop
 
 Usage: nvmd [COMMAND]
 
 Commands:
-  current  Get the currently used version
-  list     List the all installed versions of Node.js
-  ls       List the all installed versions of Node.js
-  use      Use the installed version of Node.js (default is global)
-  which    Get the path to the executable to where Node.js was installed
-  help     Print this message or the help of the given subcommand(s)
+  current    Get the currently used version
+  install    Install the specified version of Node.js
+  list       List the all installed versions of Node.js
+  ls         List the all installed versions of Node.js
+  uninstall  Uninstall the specified version of Node.js
+  use        Use the installed version of Node.js (default is global)
+  which      Get the path to the executable to where Node.js was installed
+  help       Print this message or the help of the given subcommand(s)
 
 Options:
   -h, --help     Print help
   -V, --version  Print version
+```
 
-Please download new version of Node.js in nvm-desktop.
+To install a specific version of node:
+```shell
+nvmd install 24.5.0
+
+Downloading node@24.5.0 from https://npmmirror.com/mirrors/node/v24.5.0/node-v24.5.0-darwin-arm64.tar.gz
+Unpacking node into '/Users/******/.nvmd/versions/.tmpcWaLAP'
+  Fetching node@24.5.0  [###################################>    ]  88%  
+Installing node in '/Users/******/.nvmd/versions/24.5.0'   
+```
+
+Or uninstal:
+```shell
+nvmd uninstall 24.5.0
 ```
 
 You can list all installed versions using `list` or `ls`:
@@ -112,33 +126,25 @@ node --version
 - Inside nvmd, it will quickly find the installation directory of the corresponding version node through the set version number: `$HOME/.nvmd/versions/20.6.1`
 
 ```rust
-fn get_version() -> String {
-    // Find the version number set for the project
-    let mut nvmdrc = match env::current_dir() {
-        Err(_) => PathBuf::from(""),
-        Ok(dir) => dir,
-    };
-    nvmdrc.push(".nvmdrc");
-
-    let project_version = match read_to_string(&nvmdrc) {
-        Err(_) => String::from(""),
-        Ok(v) => v,
-    };
-
-    if !project_version.is_empty() {
-        return project_version;
+fn get_version() -> Result<Option<String>> {
+    for path in [find_nvmdrc()?, Some(nvmd_home()?.default_path())] // $HOME/.nvmd/versions/20.6.1
+        .into_iter()
+        .flatten()
+    {
+        let version = read_to_string(&path)?;
+        if !version.trim().is_empty() {
+            return Ok(Some(version.trim().to_string()));
+        }
     }
 
-    // Find the version number set for the system
-    let mut default_path = NVMD_PATH.clone();
-    default_path.push("default");
+    Ok(None)
+}
 
-    let default_version = match read_to_string(&default_path) {
-        Err(_) => String::from(""),
-        Ok(v) => v,
-    };
-
-    return default_version;
+fn find_nvmdrc() -> Result<Option<PathBuf>> {
+    Ok(std::env::current_dir()?
+        .ancestors()
+        .map(|dir| dir.join(".nvmdrc"))
+        .find(|path| path.is_file()))
 }
 ```
 
@@ -147,10 +153,15 @@ fn get_version() -> String {
 - Execute the `node --version` command by this new process
 
 ```rust
-let child = Command::new(exe)
-    .env("PATH", ENV_PATH.clone()) // $HOME/.nvmd/versions/20.6.1/bin:$PATH
-    .args(args)
-    .status();
+// $HOME/.nvmd/versions/20.6.1/bin:$PATH
+let path = Context::global()?.env_path()?;
+
+let mut command = command::create_command(exe);
+command.args(args);
+command.env("PATH", path);
+
+let status = command.status()?;
+Ok(status)
 ```
 
 - Then get the output of the new process, wait for it to execute and finally exit.
