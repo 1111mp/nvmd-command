@@ -1,5 +1,4 @@
-pub mod group;
+pub mod command;
 pub mod help;
-pub mod package;
-pub mod project;
-pub mod setting;
+pub mod notice;
+pub mod progress;

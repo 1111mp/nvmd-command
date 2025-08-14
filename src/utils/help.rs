@@ -1,11 +1,9 @@
-use std::{fs, path::PathBuf};
-
-use crate::common::NVMD_PATH;
-use anyhow::{bail, Context, Result};
+use crate::module::nvmd_home;
+use crate::module::Setting;
+use anyhow::{anyhow, bail, Context, Result};
 use fs_extra::file::{remove, write_all};
 use serde::de::DeserializeOwned;
-
-use crate::common::INSTALLTION_DIRECTORY;
+use std::{fs, path::PathBuf};
 
 pub fn read_json<T: DeserializeOwned>(path: &PathBuf) -> Result<T> {
     if !path.exists() {
@@ -29,42 +27,47 @@ pub fn write_json<T: serde::Serialize>(path: &PathBuf, data: &T) -> Result<()> {
     Ok(())
 }
 
-pub fn is_valid_version(version: &String) -> bool {
-    if let Some(mut version_path) = INSTALLTION_DIRECTORY.clone() {
-        version_path.push(&version);
-        if cfg!(windows) {
-            version_path.push("node.exe");
-        }
-        if cfg!(unix) {
-            version_path.push("bin");
-            version_path.push("node");
-        }
-        return version_path.exists();
-    }
-    false
+pub fn node_version_parse(input: &str) -> Result<node_semver::Version> {
+    node_semver::Version::parse(input).with_context(|| {
+        anyhow!(
+            "Failed to parse Node version {} \nPlease ensure the correct version is specified.",
+            input
+        )
+    })
 }
 
-pub fn sanitize_version(version: &String) -> String {
-    let mut version = version.clone();
-    if version.starts_with("v") {
-        version.remove(0);
+pub fn node_strict_available(version: &str) -> Result<bool> {
+    let mut path = Setting::global()?.get_directory()?.join(version);
+
+    if cfg!(windows) {
+        path.push("node.exe");
     }
-    version
+    if cfg!(unix) {
+        path.push("bin");
+        path.push("node");
+    }
+    Ok(path.exists())
+}
+
+pub fn node_available(version: &str) -> Result<bool> {
+    Setting::global()
+        .and_then(|s| s.get_directory())
+        .map(|dir| dir.join(version).exists())
+}
+
+pub fn sanitize_version(version: &str) -> String {
+    version.strip_prefix('v').unwrap_or(version).to_string()
 }
 
 #[cfg(unix)]
 pub fn link_package(name: &str) -> Result<()> {
     use std::os::unix::fs;
-    if let Some(path) = NVMD_PATH.clone() {
-        let mut source = path.clone();
-        source.push("bin");
-        source.push("nvmd");
-        let mut alias = path.clone();
-        alias.push("bin");
-        alias.push(name);
 
-        fs::symlink(source, alias)?;
-    }
+    let home = nvmd_home()?;
+    let source = home.bin_dir().join("nvmd");
+    let alias = home.bin_dir().join(name);
+    fs::symlink(source, alias)?;
+
     Ok(())
 }
 
@@ -72,52 +75,35 @@ pub fn link_package(name: &str) -> Result<()> {
 pub fn link_package(name: &str) -> Result<()> {
     use fs_extra::file::{copy, CopyOptions};
 
-    if let Some(path) = NVMD_PATH.clone() {
-        let mut exe_source = path.clone();
-        exe_source.push("bin");
-        exe_source.push("nvmd.exe");
-        let mut cmd_source = path.clone();
-        cmd_source.push("bin");
-        cmd_source.push("npm.cmd");
+    let home = nvmd_home()?;
+    let exe_source = home.bin_dir().join("nvmd.exe");
+    let cmd_source = home.bin_dir().join("npm.cmd");
+    let exe_alias = home.bin_dir().join(format!("{}.exe", name));
+    let cmd_alias = home.bin_dir().join(format!("{}.cmd", name));
+    let options = CopyOptions::new().skip_exist(true);
 
-        let mut exe_alias = path.clone();
-        exe_alias.push("bin");
-        exe_alias.push(format!("{}.exe", name));
-        let mut cmd_alias = path.clone();
-        cmd_alias.push("bin");
-        cmd_alias.push(format!("{}.cmd", name));
+    copy(&exe_source, &exe_alias, &options)?;
+    copy(&cmd_source, &cmd_alias, &options)?;
 
-        let mut options = CopyOptions::new();
-        options.skip_exist = true;
-        copy(&exe_source, &exe_alias, &options)?;
-        copy(&cmd_source, &cmd_alias, &options)?;
-    }
     Ok(())
 }
 
 #[cfg(unix)]
 pub fn unlink_package(name: &str) -> Result<()> {
-    if let Some(mut alias) = NVMD_PATH.clone() {
-        alias.push("bin");
-        alias.push(name);
+    let alias = nvmd_home()?.bin_dir().join(name);
+    remove(alias)?;
 
-        remove(alias)?;
-    }
     Ok(())
 }
 
 #[cfg(windows)]
 pub fn unlink_package(name: &str) -> Result<()> {
-    if let Some(path) = NVMD_PATH.clone() {
-        let mut exe_alias = path.clone();
-        exe_alias.push("bin");
-        exe_alias.push(format!("{}.exe", name));
-        let mut cmd_alias = path.clone();
-        cmd_alias.push("bin");
-        cmd_alias.push(format!("{}.cmd", name));
+    let home = nvmd_home()?;
+    let exe_alias = home.bin_dir().join(format!("{}.exe", name));
+    let cmd_alias = home.bin_dir().join(format!("{}.cmd", name));
 
-        remove(exe_alias)?;
-        remove(cmd_alias)?;
-    }
+    remove(exe_alias)?;
+    remove(cmd_alias)?;
+
     Ok(())
 }

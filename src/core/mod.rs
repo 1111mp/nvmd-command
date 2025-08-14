@@ -2,35 +2,36 @@ use anyhow::{anyhow, Result};
 use std::{
     env::{self, ArgsOs},
     ffi::{OsStr, OsString},
-    io::{Error, ErrorKind},
     path::Path,
     process::ExitStatus,
 };
 
 mod binary;
 mod corepack;
-mod engine;
+mod node;
 mod npm;
+mod npx;
 mod nvmd;
 
 pub fn execute() -> Result<ExitStatus> {
     let mut native_args = env::args_os();
-    let exe = get_tool_name(&mut native_args).expect("get tool name error");
+    let exe = get_tool_name(&mut native_args)?;
     let args: Vec<_> = native_args.collect();
 
     match exe.to_str() {
         Some("nvmd") => nvmd::command(),
+        Some("node") => node::command(&exe, &args),
         Some("npm") => npm::command(&exe, &args),
         Some("corepack") => corepack::command(&exe, &args),
-        Some("node") | Some("npx") => engine::command(&exe, &args),
+        Some("npx") => npx::command(&exe, &args),
         _ => binary::command(&exe, &args),
     }
 }
 
-fn get_tool_name(args: &mut ArgsOs) -> Result<OsString, Error> {
+fn get_tool_name(args: &mut ArgsOs) -> Result<OsString> {
     args.next()
         .and_then(|arg0| Path::new(&arg0).file_name().map(tool_name_from_file_name))
-        .ok_or_else(|| ErrorKind::InvalidInput.into())
+        .ok_or_else(|| anyhow!("Could not determine tool name"))
 }
 
 #[cfg(unix)]

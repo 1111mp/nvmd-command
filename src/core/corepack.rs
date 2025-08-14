@@ -1,22 +1,14 @@
-use super::Result;
-use super::{ExitStatus, OsStr, OsString};
-
+use crate::module::{Context, Packages};
 use crate::signal::pass_control_to_shim;
+use crate::utils::command;
 use crate::utils::help::{link_package, unlink_package};
-use crate::utils::package::package_can_be_removed;
-use crate::{
-    command as CommandTool,
-    common::{ENV_PATH, VERSION},
-};
+use anyhow::Result;
+use std::ffi::{OsStr, OsString};
+use std::process::ExitStatus;
 
-use anyhow::bail;
-use lazy_static::lazy_static;
-
-lazy_static! {
-    static ref ENABLE: OsString = OsString::from("enable");
-    static ref DISABLE: OsString = OsString::from("disable");
-    static ref INSTALL_DIRECTORY: OsString = OsString::from("--install-directory");
-}
+const ENABLE: &str = "enable";
+const DISABLE: &str = "disable";
+const INSTALL_DIRECTORY: &str = "--install-directory";
 
 // corepack enable --install-directory /path/to/folder
 
@@ -29,74 +21,57 @@ lazy_static! {
 // directory via the `--install-directory` flag.
 
 pub(super) fn command(exe: &OsStr, args: &[OsString]) -> Result<ExitStatus> {
-    let env_path = match ENV_PATH.as_ref() {
-        Some(env_path) => env_path,
-        None => {
-            if VERSION.is_none() {
-                bail!("the default node version is not set, you can set it by executing \"nvmd use {{version}}\"");
-            }
-            if let Some(version) = VERSION.as_ref() {
-                bail!(
-                    "version v{} is not installed, please install it before using",
-                    version
-                );
-            }
-            bail!("command not found: {:?}", exe);
-        }
-    };
+    let path = Context::global()?.env_path()?;
 
-    let mut command = CommandTool::create_command(exe);
-    command.env("PATH", env_path).args(args);
+    let mut command = command::create_command(exe);
+    command.args(args);
+    command.env("PATH", path);
 
     pass_control_to_shim();
 
     let status = command.status()?;
 
-    let install_directory = args.contains(&*INSTALL_DIRECTORY);
-    if args.contains(&*ENABLE) && !install_directory {
-        corepack_manage(args, true)?;
-    }
+    let install_directory = args.iter().any(|a| a == INSTALL_DIRECTORY);
+    if !install_directory {
+        if args.iter().any(|a| a == ENABLE) {
+            corepack_manager(args, true)?;
+        }
 
-    if args.contains(&*DISABLE) && !install_directory {
-        corepack_manage(args, false)?;
+        if args.iter().any(|a| a == DISABLE) {
+            corepack_manager(args, false)?;
+        }
     }
 
     Ok(status)
 }
 
-fn corepack_manage(args: &[OsString], enable: bool) -> Result<()> {
-    let mut packages: Vec<String> = args
+fn corepack_manager(args: &[OsString], enable: bool) -> Result<()> {
+    let mut shims: Vec<&str> = args
         .iter()
         .filter_map(|name| {
-            if is_package_name(name) {
-                name.to_str().map(String::from)
+            if is_supported_package(name) {
+                name.to_str()
             } else {
                 None
             }
         })
         .collect();
 
-    if packages.is_empty() && !args.contains(&OsString::from("npm")) {
-        packages.push(String::from("yarn"));
-        packages.push(String::from("pnpm"));
+    if shims.is_empty() && !args.iter().any(|a| a == "npm") {
+        shims.extend(["yarn", "pnpm"]);
     }
 
-    for package in packages {
+    let packages = Packages::new()?;
+    for shim in shims {
         if enable {
-            link_package(&package)?;
-            if package == "yarn" {
-                link_package("yarnpkg")?;
+            link_package(&shim)?;
+            for extra in package_extra_aliases(shim) {
+                link_package(extra)?;
             }
-            if package == "pnpm" {
-                link_package("pnpx")?;
-            }
-        } else if package_can_be_removed(&package)? {
-            unlink_package(&package)?;
-            if package == "yarn" {
-                unlink_package("yarnpkg")?;
-            }
-            if package == "pnpm" {
-                unlink_package("pnpx")?;
+        } else if packages.can_be_removed(&shim) {
+            unlink_package(&shim)?;
+            for extra in package_extra_aliases(shim) {
+                unlink_package(extra)?;
             }
         }
     }
@@ -104,7 +79,15 @@ fn corepack_manage(args: &[OsString], enable: bool) -> Result<()> {
     Ok(())
 }
 
-fn is_package_name<A>(arg: &A) -> bool
+fn package_extra_aliases(name: &str) -> &'static [&'static str] {
+    match name {
+        "yarn" => &["yarnpkg"],
+        "pnpm" => &["pnpx"],
+        _ => &[],
+    }
+}
+
+fn is_supported_package<A>(arg: &A) -> bool
 where
     A: AsRef<OsStr>,
 {

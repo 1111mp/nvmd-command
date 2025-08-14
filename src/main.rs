@@ -1,9 +1,12 @@
-mod command;
-mod common;
+mod cli;
 mod core;
+mod module;
+mod node;
+mod npm;
 mod signal;
 mod utils;
 
+use console::style;
 use core::execute;
 use signal::setup_signal_handler;
 use std::process;
@@ -21,7 +24,7 @@ fn main() {
         }
         Err(error) => {
             // Print error messages to standard error output
-            eprintln!("nvm-desktop: {}", error);
+            eprintln!("nvm-desktop: {}", style(error).red());
             process::exit(1);
         }
     }

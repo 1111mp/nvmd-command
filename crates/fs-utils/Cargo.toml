@@ -1,0 +1,7 @@
+[package]
+name = "fs-utils"
+version = "0.1.0"
+authors = ["The1111mp <The1111mp@outlook.com>"]
+edition = "2021"
+
+[dependencies]
