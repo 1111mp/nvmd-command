@@ -1,6 +1,6 @@
 [package]
 name = "nvmd"
-version = "4.1.0"
+version = "4.1.1"
 edition = "2021"
 authors = ["The1111mp <The1111mp@outlook.com>"]
 
