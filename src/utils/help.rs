@@ -66,9 +66,12 @@ pub fn link_package(name: &str) -> Result<()> {
     let home = nvmd_home()?;
     let source = home.bin_dir().join("nvmd");
     let alias = home.bin_dir().join(name);
-    fs::symlink(source, alias)?;
 
-    Ok(())
+    match fs::symlink(source, alias) {
+        Ok(_) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+        Err(e) => Err(e.into()),
+    }
 }
 
 #[cfg(windows)]
