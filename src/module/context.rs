@@ -55,6 +55,13 @@ impl Context {
 }
 
 fn get_version() -> Result<Option<String>> {
+    if let Ok(env_version) = std::env::var("NVMD_NODE_VERSION") {
+        let v = env_version.trim();
+        if !v.is_empty() {
+            return Ok(Some(v.to_string()));
+        }
+    }
+
     for path in [find_nvmdrc()?, Some(nvmd_home()?.default_path())]
         .into_iter()
         .flatten()
