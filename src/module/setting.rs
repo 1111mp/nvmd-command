@@ -12,6 +12,10 @@ pub struct Setting {
 
     /// download base url
     pub mirror: Option<String>,
+
+    /// node version file name
+    /// default: .nvmdrc
+    pub node_version_file: Option<String>,
 }
 
 impl Setting {
@@ -26,6 +30,7 @@ impl Setting {
                 Err(_) => Ok(Self {
                     directory: Some(home.versions_dir()),
                     mirror: Some("https://nodejs.org/dist".into()),
+                    node_version_file: Some(".nvmdrc".into()),
                 }),
             }
         })
@@ -42,5 +47,9 @@ impl Setting {
             .directory
             .clone()
             .unwrap_or(nvmd_home()?.versions_dir()))
+    }
+
+    pub fn get_node_version_file(&self) -> String {
+        self.node_version_file.clone().unwrap_or(".nvmdrc".into())
     }
 }

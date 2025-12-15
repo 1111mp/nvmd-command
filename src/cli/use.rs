@@ -1,5 +1,5 @@
 use crate::{
-    module::{nvmd_home, Groups, Projects},
+    module::{nvmd_home, Groups, Projects, Setting},
     utils::{
         help::{node_strict_available, node_version_parse},
         notice::Notice,
@@ -83,7 +83,8 @@ impl Use {
             groups.save()?;
         }
 
-        let nvmdrc = project_path.join(".nvmdrc");
+        let file_name = Setting::global()?.get_node_version_file();
+        let nvmdrc = project_path.join(&file_name);
         write_all(nvmdrc, &version)?;
 
         if is_group {
