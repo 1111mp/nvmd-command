@@ -3,7 +3,10 @@ use crate::module::Setting;
 use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
 use fs_extra::file::read_to_string;
 use once_cell::sync::OnceCell;
-use std::{ffi::OsString, path::PathBuf};
+use std::{
+    ffi::{OsStr, OsString},
+    path::PathBuf,
+};
 
 pub struct Context {
     pub version: Option<String>,
@@ -52,6 +55,25 @@ impl Context {
                     "Could not create execution environment.\nPlease ensure your PATH is valid."
                 )
             })
+    }
+
+    pub fn check_lib_path(&self, lib: &OsStr) -> Result<()> {
+        let version = self.version
+            .clone()
+            .ok_or(
+             anyhow!("The default Node version is not set, you can set it by executing \"nvmd use {{version}}\"")
+            )?;
+
+        let mut path = super::Setting::global()?.get_directory()?.join(&version);
+        if cfg!(unix) {
+            path.push("bin");
+        }
+        path.push(lib);
+
+        if !path.exists() {
+            bail!("command not found: {:?}", lib);
+        }
+        Ok(())
     }
 }
 
