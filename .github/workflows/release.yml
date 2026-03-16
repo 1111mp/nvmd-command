@@ -16,7 +16,7 @@ jobs:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             platform:
-            arch: x64
+              arch: x64
           - os: windows-latest
             target: aarch64-pc-windows-msvc
             arch: arm64
@@ -35,7 +35,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install Rust Stable
         uses: dtolnay/rust-toolchain@stable
@@ -104,7 +104,7 @@ jobs:
     needs: [release]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install Rust Stable
         uses: dtolnay/rust-toolchain@stable
