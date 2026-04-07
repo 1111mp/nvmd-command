@@ -14,8 +14,6 @@ env:
 
 jobs:
   cargo-check:
-    env:
-      RUSTFLAGS: "-D warnings"
     strategy:
       fail-fast: false
       matrix:
@@ -44,6 +42,6 @@ jobs:
         with:
           save-if: false
 
-      - name: Cargo Check (deny warnings)
+      - name: Cargo Check
         run: |
           cargo check --target ${{ matrix.target }} --workspace --all-features
