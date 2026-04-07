@@ -37,9 +37,9 @@
     },
 
     {
-      "description": "Schedule updates on weekends (reduce CI noise)",
+      "description": "Allow Rust dependency updates throughout the week",
       "matchManagers": ["cargo"],
-      "schedule": ["every weekend"]
+      "schedule": ["at any time"]
     }
   ]
 }
