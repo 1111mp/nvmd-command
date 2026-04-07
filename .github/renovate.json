@@ -1,0 +1,45 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+
+  "extends": ["config:recommended"],
+
+  "labels": ["dependencies"],
+  "rangeStrategy": "bump",
+  "rebaseWhen": "conflicted",
+  "prConcurrentLimit": 5,
+  "prHourlyLimit": 2,
+
+  "packageRules": [
+    {
+      "description": "Group all Rust crates into one PR",
+      "matchManagers": ["cargo"],
+      "groupName": "Rust dependencies"
+    },
+
+    {
+      "description": "Automerge patch updates",
+      "matchUpdateTypes": ["patch"],
+      "automerge": true,
+      "automergeType": "pr"
+    },
+
+    {
+      "description": "Automerge minor updates",
+      "matchUpdateTypes": ["minor"],
+      "automerge": true,
+      "automergeType": "pr"
+    },
+
+    {
+      "description": "Require manual review for major updates",
+      "matchUpdateTypes": ["major"],
+      "automerge": false
+    },
+
+    {
+      "description": "Schedule updates on weekends (reduce CI noise)",
+      "matchManagers": ["cargo"],
+      "schedule": ["every weekend"]
+    }
+  ]
+}
