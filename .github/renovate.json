@@ -1,50 +1,29 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "config:recommended",
-    ":disableDependencyDashboard"
-  ],
-  "labels": [
-    "dependencies"
-  ],
+  "extends": ["config:recommended", ":disableDependencyDashboard"],
+  "enabledManagers": ["cargo", "github-actions"],
+  "labels": ["dependencies"],
   "rangeStrategy": "bump",
-  "rebaseWhen": "conflicted",
-  "prConcurrentLimit": 5,
-  "prHourlyLimit": 2,
-  "platformAutomerge": true,
   "packageRules": [
     {
-      "description": "Group all Rust crates into one PR",
-      "matchManagers": [
-        "cargo"
-      ],
-      "groupName": "Rust dependencies"
+      "description": "Group all cargo crates into one PR",
+      "matchManagers": ["cargo"],
+      "groupName": "cargo dependencies"
     },
     {
       "description": "Automerge patch updates",
-      "matchUpdateTypes": [
-        "patch"
-      ],
-      "automerge": true,
-      "automergeType": "pr"
+      "matchUpdateTypes": ["patch"],
+      "automerge": true
     },
     {
       "description": "Require manual review for minor and major updates",
-      "matchUpdateTypes": [
-        "minor",
-        "major"
-      ],
+      "matchUpdateTypes": ["minor", "major"],
       "automerge": false
     },
     {
-      "description": "Allow Rust dependency updates throughout the week",
-      "matchManagers": [
-        "cargo"
-      ],
-      "schedule": [
-        "at any time"
-      ]
+      "description": "Group all GitHub Actions updates into a single PR",
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions"
     }
-  ],
-  "ignoreTests": false
+  ]
 }
