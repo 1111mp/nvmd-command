@@ -73,7 +73,7 @@ jobs:
           mv target/${{ matrix.target }}/release/nvmd nvmd_linux-${{ matrix.arch }}
 
       - name: Upload Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: alpha
           name: 'NVMD Command alpha'
@@ -98,7 +98,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Upload Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: alpha
           name: 'NVMD Command alpha'
