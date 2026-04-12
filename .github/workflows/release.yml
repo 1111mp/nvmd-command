@@ -89,7 +89,7 @@ jobs:
           mv target/${{ matrix.target }}/release/nvmd nvmd_linux-${{ matrix.arch }}
 
       - name: Upload Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{env.VERSION}}
           name: 'NVMD Command v${{env.VERSION}}'
@@ -121,7 +121,7 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Upload Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{env.VERSION}}
           name: 'NVMD Command v${{env.VERSION}}'
