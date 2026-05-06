@@ -3,6 +3,7 @@ use anyhow::Result;
 mod current;
 mod install;
 mod list;
+mod shim;
 mod uninstall;
 mod r#use;
 mod which;
@@ -21,6 +22,9 @@ pub enum Subcommand {
     /// List the all installed versions of Node.js
     Ls(list::List),
 
+    /// Manage executable shims placed in '$NVMD_HOME/bin'.
+    Shim(shim::Shim),
+
     /// Uninstall the specified version of Node.js
     Uninstall(uninstall::Uninstall),
 
@@ -37,6 +41,7 @@ impl Subcommand {
             Subcommand::Current(current) => current.run(),
             Subcommand::Install(install) => install.run(),
             Subcommand::List(list) | Subcommand::Ls(list) => list.run(),
+            Subcommand::Shim(shim) => shim.run(),
             Subcommand::Uninstall(uninstall) => uninstall.run(),
             Subcommand::Use(r#use) => r#use.run(),
             Subcommand::Which(which) => which.run(),
