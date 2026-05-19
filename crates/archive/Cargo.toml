@@ -14,7 +14,7 @@ flate2 = "1.1.9"
 fs-utils = { path = "../fs-utils" }
 headers = "0.4.1"
 progress-read = { path = "../progress-read" }
-tar = "0.4.45"
+tar = "0.4.46"
 tee = "0.1"
 thiserror = "2.0.18"
 verbatim = "0.1.1"
