@@ -5,7 +5,7 @@ authors = ["The1111mp <The1111mp@outlook.com>"]
 edition = "2021"
 
 [dependencies]
-attohttpc = { version = "0.30.1", features = [
+attohttpc = { version = "0.31.0", features = [
   "compress",
   "tls-rustls-native-roots",
 ] }
