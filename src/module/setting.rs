@@ -16,6 +16,10 @@ pub struct Setting {
     /// node version file name
     /// default: .nvmdrc
     pub node_version_file: Option<String>,
+
+    /// embed server port
+    /// default: 53333
+    pub embed_server_port: Option<u16>,
 }
 
 impl Setting {
@@ -31,6 +35,7 @@ impl Setting {
                     directory: Some(home.versions_dir()),
                     mirror: Some("https://nodejs.org/dist".into()),
                     node_version_file: Some(".nvmdrc".into()),
+                    embed_server_port: Some(53333),
                 }),
             }
         })
@@ -51,5 +56,9 @@ impl Setting {
 
     pub fn get_node_version_file(&self) -> String {
         self.node_version_file.clone().unwrap_or(".nvmdrc".into())
+    }
+
+    pub fn get_embed_server_port(&self) -> u16 {
+        self.embed_server_port.unwrap_or(53333)
     }
 }

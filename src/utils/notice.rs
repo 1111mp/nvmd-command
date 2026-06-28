@@ -1,3 +1,4 @@
+use crate::module::Setting;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
@@ -42,7 +43,8 @@ impl Notice {
     }
 
     pub fn send(self) -> Result<()> {
-        attohttpc::post("http://127.0.0.1:53333/notice")
+        let port = Setting::global()?.get_embed_server_port();
+        attohttpc::post(format!("http://127.0.0.1:{port}/notice"))
             .json(&self)?
             .send()?;
 
