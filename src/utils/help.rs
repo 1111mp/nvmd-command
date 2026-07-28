@@ -1,6 +1,6 @@
-use crate::module::nvmd_home;
 use crate::module::Setting;
-use anyhow::{anyhow, bail, Context, Result};
+use crate::module::nvmd_home;
+use anyhow::{Context, Result, anyhow, bail};
 use fs_extra::file::{remove, write_all};
 use serde::de::DeserializeOwned;
 use std::{fs, path::PathBuf};
@@ -27,15 +27,6 @@ pub fn write_json<T: serde::Serialize>(path: &PathBuf, data: &T) -> Result<()> {
     Ok(())
 }
 
-pub fn node_version_parse(input: &str) -> Result<node_semver::Version> {
-    node_semver::Version::parse(input).with_context(|| {
-        anyhow!(
-            "Failed to parse Node version {} \nPlease ensure the correct version is specified.",
-            input
-        )
-    })
-}
-
 pub fn node_strict_available(version: &str) -> Result<bool> {
     let mut path = Setting::global()?.get_directory()?.join(version);
 
@@ -55,10 +46,6 @@ pub fn node_available(version: &str) -> Result<bool> {
         .map(|dir| dir.join(version).exists())
 }
 
-pub fn sanitize_version(version: &str) -> String {
-    version.strip_prefix('v').unwrap_or(version).to_string()
-}
-
 #[cfg(unix)]
 pub fn link_package(name: &str) -> Result<()> {
     use std::os::unix::fs;
@@ -76,7 +63,7 @@ pub fn link_package(name: &str) -> Result<()> {
 
 #[cfg(windows)]
 pub fn link_package(name: &str) -> Result<()> {
-    use fs_extra::file::{copy, CopyOptions};
+    use fs_extra::file::{CopyOptions, copy};
 
     let home = nvmd_home()?;
     let exe_source = home.bin_dir().join("nvmd.exe");

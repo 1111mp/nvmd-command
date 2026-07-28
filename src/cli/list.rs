@@ -1,11 +1,8 @@
-use crate::{
-    module::{Context, Groups, Setting},
-    utils::help::node_version_parse,
-};
+use crate::module::{Context, Groups, NodeVersionResolver, Setting};
 use anyhow::Result;
-use fs_extra::dir::{ls, DirEntryAttr, DirEntryValue};
+use fs_extra::dir::{DirEntryAttr, DirEntryValue, ls};
 use std::{cmp::Ordering, collections::HashSet};
-use version_compare::{compare, Cmp};
+use version_compare::{Cmp, compare};
 
 #[derive(clap::Args)]
 pub struct List {
@@ -38,7 +35,7 @@ impl List {
                     DirEntryValue::String(s) => s,
                     _ => return None,
                 };
-                node_version_parse(version_str)
+                NodeVersionResolver::parse(version_str)
                     .ok()
                     .map(|_| version_str.to_string())
             })

@@ -21,7 +21,6 @@ envoy = "0.1.3"
 fs_extra = "1.3"
 fs-utils = { path = "crates/fs-utils" }
 indicatif = "0.18.6"
-node-semver = "2.2.0"
 once_cell = "1.21.4"
 regex = "1.13.1"
 retry = "2.2.0"
@@ -31,6 +30,7 @@ tempfile = "3.27.0"
 terminal_size = "0.4.4"
 time = { version = "0.3.54", features = ["local-offset"] }
 version-compare = "0.2.1"
+semver = "1.0.28"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 openssl = { version = "0.10.81", features = ["vendored"] }

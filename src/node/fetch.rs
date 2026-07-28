@@ -2,17 +2,17 @@
 /// Copyright (c) 2017, LinkedIn Corporation.
 /// https://github.com/volta-cli/volta
 ///
-use super::{tool_version, Node};
+use super::{Node, tool_version};
 use crate::module::Setting;
 use crate::utils::progress::progress_bar;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use archive::Archive;
 use fs_utils::ensure_containing_dir_exists;
-use node_semver::Version;
 use retry::delay::Fibonacci;
-use retry::{retry, OperationResult};
+use retry::{OperationResult, retry};
+use semver::Version;
 use std::{fs::File, path::Path};
-use tempfile::{tempdir_in, NamedTempFile, TempDir};
+use tempfile::{NamedTempFile, TempDir, tempdir_in};
 
 pub fn fetch(version: &Version) -> Result<()> {
     let install_dir = Setting::global()?.get_directory()?;

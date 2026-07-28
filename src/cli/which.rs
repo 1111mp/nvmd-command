@@ -1,5 +1,5 @@
-use crate::{module::Setting, utils::help::node_version_parse};
-use anyhow::{bail, Result};
+use crate::module::{NodeVersionResolver, Setting};
+use anyhow::{Result, bail};
 
 #[derive(clap::Args)]
 pub struct Which {
@@ -9,10 +9,8 @@ pub struct Which {
 
 impl super::Command for Which {
     fn run(self) -> Result<()> {
-        let version = node_version_parse(&self.version)?;
-        let mut path = Setting::global()?
-            .get_directory()?
-            .join(&version.to_string());
+        let version = NodeVersionResolver::resolve(&self.version)?;
+        let mut path = Setting::global()?.get_directory()?.join(&version);
         if cfg!(unix) {
             path.push("bin");
         }

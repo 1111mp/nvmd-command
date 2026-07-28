@@ -1,7 +1,4 @@
-use crate::{
-    node::Node,
-    utils::{help::node_version_parse, notice::Notice},
-};
+use crate::{module::NodeVersionResolver, node::Node, utils::notice::Notice};
 use anyhow::Result;
 
 #[derive(clap::Args)]
@@ -12,7 +9,7 @@ pub struct Install {
 
 impl super::Command for Install {
     fn run(self) -> Result<()> {
-        let version = node_version_parse(&self.version)?;
+        let version = NodeVersionResolver::parse(&self.version)?;
         Node::new(version).ensure_fetched()?;
 
         let _ = Notice::from_version().send();

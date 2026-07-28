@@ -1,8 +1,8 @@
 use std::fmt::{self, Display};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use cfg_if::cfg_if;
-use node_semver::Version;
+use semver::Version;
 
 use crate::utils::help::node_available;
 
