@@ -1,6 +1,6 @@
 # nvmd-command
 
-English | [简体中文](./README.zh-CN.md)
+English | [简体中文](./README.zh-CN.md) | [Español](./README.es-ES.md)
 
 `nvmd-command` (binary name: `nvmd`) is a lightweight Node.js version management CLI built with Rust.
 
