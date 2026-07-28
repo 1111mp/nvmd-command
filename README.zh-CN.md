@@ -1,6 +1,6 @@
 # nvmd-command
 
-简体中文 | [English](./README.md)
+简体中文 | [English](./README.md) | [Español](./README.es-ES.md)
 
 `nvmd-command`（可执行文件名：`nvmd`）是一个使用 Rust 构建的轻量级 Node.js 版本管理命令行工具。它同时也是 [nvm-desktop](https://github.com/1111mp/nvm-desktop) 的核心命令组件：
 
