@@ -1,6 +1,6 @@
 [package]
 name = "nvmd"
-version = "4.3.3"
+version = "4.4.0"
 authors = ["The1111mp <The1111mp@outlook.com>"]
 edition = "2024"
 rust-version = "1.95"
