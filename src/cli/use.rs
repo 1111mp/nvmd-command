@@ -1,11 +1,8 @@
 use crate::{
-    module::{nvmd_home, Groups, Projects, Setting},
-    utils::{
-        help::{node_strict_available, node_version_parse},
-        notice::Notice,
-    },
+    module::{Groups, NodeVersionResolver, Projects, Setting, nvmd_home},
+    utils::{help::node_strict_available, notice::Notice},
 };
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use fs_extra::file::write_all;
 
 #[derive(clap::Args)]
@@ -34,16 +31,16 @@ impl Use {
             bail!("Group@{} can only be used for projects", &self.version)
         }
 
-        let version = node_version_parse(&self.version)?;
-        if !node_strict_available(&version.to_string())? {
+        let version = NodeVersionResolver::resolve(&self.version)?;
+        if !node_strict_available(&version)? {
             bail!("Node@v{} has not been installed", &version);
         }
 
         let default_path = nvmd_home()?.default_path();
-        write_all(default_path, &version.to_string())?;
+        write_all(default_path, &version)?;
         eprintln!("Now using node v{}", &version);
 
-        let _ = Notice::from_current(version.to_string()).send();
+        let _ = Notice::from_current(version.clone()).send();
 
         Ok(())
     }
@@ -59,7 +56,7 @@ impl Use {
                     &self.version
                 )
             })?,
-            None => node_version_parse(&self.version)?.to_string(),
+            None => NodeVersionResolver::resolve(&self.version)?,
         };
 
         if !node_strict_available(&version)? {

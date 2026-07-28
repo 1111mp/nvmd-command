@@ -1,6 +1,6 @@
 use super::nvmd_home;
-use crate::module::Setting;
-use anyhow::{anyhow, bail, Context as AnyhowContext, Result};
+use crate::module::{NodeVersionResolver, Setting};
+use anyhow::{Context as AnyhowContext, Result, anyhow, bail};
 use fs_extra::file::read_to_string;
 use once_cell::sync::OnceCell;
 use std::{
@@ -82,7 +82,7 @@ fn get_version() -> Result<Option<String>> {
     if let Ok(env_version) = std::env::var("NVMD_NODE_VERSION") {
         let v = env_version.trim();
         if !v.is_empty() {
-            return Ok(Some(v.to_string()));
+            return Ok(Some(NodeVersionResolver::resolve(v)?));
         }
     }
 
@@ -92,7 +92,7 @@ fn get_version() -> Result<Option<String>> {
         let content = read_to_string(&path)?;
         let t = content.trim();
         if !t.is_empty() {
-            return Ok(Some(t.to_string()));
+            return Ok(Some(NodeVersionResolver::resolve(t)?));
         }
     }
 
@@ -103,7 +103,7 @@ fn get_version() -> Result<Option<String>> {
         let content = read_to_string(&default_path)?;
         let t = content.trim();
         if !t.is_empty() {
-            return Ok(Some(t.to_string()));
+            return Ok(Some(NodeVersionResolver::resolve(t)?));
         }
     }
 

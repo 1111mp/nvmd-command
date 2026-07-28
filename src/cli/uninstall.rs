@@ -1,8 +1,8 @@
 use crate::{
-    module::Setting,
-    utils::{help::node_version_parse, notice::Notice},
+    module::{NodeVersionResolver, Setting},
+    utils::notice::Notice,
 };
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use console::style;
 use fs_extra::dir;
 
@@ -14,7 +14,7 @@ pub struct Uninstall {
 
 impl super::Command for Uninstall {
     fn run(self) -> Result<()> {
-        let version = node_version_parse(&self.version)?;
+        let version = NodeVersionResolver::parse(&self.version)?;
         let path = Setting::global()?
             .get_directory()?
             .join(&version.to_string());
