@@ -13,7 +13,7 @@ attohttpc = {
   ]
 }
 cfg-if = "1.0.4"
-flate2 = "1.1.9"
+flate2 = "1.1.10"
 fs-utils = { path = "../fs-utils" }
 headers = "0.4.1"
 progress-read = { path = "../progress-read" }
