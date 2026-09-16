@@ -12,7 +12,7 @@ attohttpc = {
     "tls-rustls-native-roots",
   ]
 }
-cfg-if = "1.0.4"
+cfg-if = "1.0.5"
 flate2 = "1.1.10"
 fs-utils = { path = "../fs-utils" }
 headers = "0.4.1"
