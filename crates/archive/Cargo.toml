@@ -15,7 +15,7 @@ attohttpc = {
 cfg-if = "1.0.5"
 flate2 = "1.1.10"
 fs-utils = { path = "../fs-utils" }
-headers = "0.4.1"
+headers = "0.4.2"
 progress-read = { path = "../progress-read" }
 tar = "0.4.46"
 tee = "0.1"
