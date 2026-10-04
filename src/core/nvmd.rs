@@ -1,6 +1,6 @@
 use crate::cli::Subcommand;
 use anyhow::Result;
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
 #[cfg(windows)]
@@ -29,10 +29,13 @@ struct Cli {
 }
 
 pub(super) fn command() -> Result<ExitStatus> {
-    Cli::parse()
-        .command
-        .map_or(Ok(()), |subcommand| subcommand.run())
-        .map(|_| ExitStatus::from_raw(0))
+    match Cli::parse().command {
+        Some(subcommand) => subcommand.run()?,
+        None => {
+            Cli::command().print_help()?;
+        }
+    }
+    Ok(ExitStatus::from_raw(0))
 }
 
 // See also `clap_cargo::style::CLAP_STYLING`
